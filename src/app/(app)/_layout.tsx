@@ -1,0 +1,168 @@
+/**
+ * Navigation chrome.
+ *
+ * TV gets a persistent left rail; a phone gets bottom tabs. Both drive the same
+ * routes, so screens never learn which one they are under.
+ */
+
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, Slot, usePathname, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { AppState, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCatalogueSync } from '@/hooks/useCatalogueSync';
+import { useSession } from '@/store/session';
+import { AppHeader } from '@/ui/AppHeader';
+import { Focusable } from '@/ui/Focusable';
+import { FocusSection } from '@/ui/FocusSection';
+import { IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
+
+type IoniconName = keyof typeof Ionicons.glyphMap;
+
+const NAV: readonly {
+  href: '/(app)/home' | '/(app)/movies' | '/(app)/series' | '/(app)/search' | '/(app)/favorites' | '/(app)/settings';
+  label: string;
+  icon: IoniconName;
+  iconActive: IoniconName;
+}[] = [
+  { href: '/(app)/home', label: 'Home', icon: 'home-outline', iconActive: 'home' },
+  { href: '/(app)/movies', label: 'Movies', icon: 'film-outline', iconActive: 'film' },
+  { href: '/(app)/series', label: 'Series', icon: 'tv-outline', iconActive: 'tv' },
+  { href: '/(app)/search', label: 'Search', icon: 'search-outline', iconActive: 'search' },
+  { href: '/(app)/favorites', label: 'Saved', icon: 'bookmark-outline', iconActive: 'bookmark' },
+  { href: '/(app)/settings', label: 'Settings', icon: 'settings-outline', iconActive: 'settings' },
+] as const;
+
+export default function AppLayout() {
+  useCatalogueSync();
+  const router = useRouter();
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  const offline = useSession((s) => s.offline);
+  const revalidate = useSession((s) => s.revalidate);
+
+  // Re-handshake on foreground, rate-limited to hourly inside the store. This
+  // is what keeps the Settings connection count honest and catches an account
+  // that expired while the app sat in the background.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void revalidate();
+    });
+    return () => sub.remove();
+  }, [revalidate]);
+
+  // Covers every way a session can end while inside the app: sign-out, an
+  // expiry caught by revalidate, or a mid-session AuthError.
+  const boot = useSession((s) => s.boot);
+  if (boot !== 'signed-in') return <Redirect href="/login" />;
+
+  const nav = (
+    <FocusSection
+      autoFocus
+      style={[
+        IS_TV ? styles.rail : styles.tabBar,
+        !IS_TV && {
+          paddingBottom: Math.max(insets.bottom, 10),
+          paddingLeft: OVERSCAN.horizontal + insets.left,
+          paddingRight: OVERSCAN.horizontal + insets.right,
+        },
+      ]}
+    >
+      {NAV.map((item) => {
+        const active = pathname.startsWith(item.href.replace('/(app)', ''));
+        return (
+          <Focusable
+            key={item.href}
+            onPress={() => router.navigate(item.href)}
+            showFocusRing={false}
+            style={IS_TV ? styles.railItem : styles.tabItem}
+          >
+            {({ focused }) => (
+              <View
+                style={[
+                  IS_TV ? styles.railInner : styles.tabInner,
+                  focused && styles.navFocused,
+                  active && styles.navActive,
+                ]}
+              >
+                <Ionicons
+                  name={active || focused ? item.iconActive : item.icon}
+                  size={IS_TV ? 20 : 22}
+                  color={active || focused ? Palette.text : Palette.textMuted}
+                />
+                <Text
+                  style={[styles.navLabel, (focused || active) && styles.navLabelOn]}
+                  numberOfLines={1}
+                >
+                  {item.label}
+                </Text>
+              </View>
+            )}
+          </Focusable>
+        );
+      })}
+    </FocusSection>
+  );
+
+  return (
+    <View style={IS_TV ? styles.tvRoot : styles.phoneRoot}>
+      {IS_TV ? nav : null}
+      <View style={styles.content}>
+        <AppHeader />
+        {offline ? (
+          <Text style={styles.offline}>
+            Offline — showing your saved library.
+          </Text>
+        ) : null}
+        <Slot />
+      </View>
+      {IS_TV ? null : nav}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  tvRoot: { flex: 1, flexDirection: 'row', backgroundColor: Palette.background },
+  phoneRoot: { flex: 1, backgroundColor: Palette.background },
+  content: { flex: 1 },
+
+  rail: {
+    width: 132,
+    paddingTop: OVERSCAN.vertical,
+    paddingLeft: 16,
+    gap: 6,
+    backgroundColor: Palette.surface,
+  },
+  railItem: { marginBottom: 2 },
+  railInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: Layout.radius,
+  },
+
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: Palette.surface,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Palette.surfaceRaised,
+  },
+  tabItem: { flex: 1 },
+  tabInner: { alignItems: 'center', gap: 3, paddingVertical: 6, borderRadius: Layout.radius },
+
+  navFocused: { backgroundColor: Palette.surfaceRaised },
+  navActive: { backgroundColor: Palette.surfaceRaised },
+  navLabel: { color: Palette.textMuted, fontSize: Type.caption },
+  navLabelOn: { color: Palette.text, fontWeight: '600' },
+
+  offline: {
+    backgroundColor: Palette.surfaceRaised,
+    color: Palette.textSecondary,
+    fontSize: Type.caption,
+    paddingVertical: 6,
+    textAlign: 'center',
+  },
+});

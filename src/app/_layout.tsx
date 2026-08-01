@@ -1,22 +1,54 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from 'expo-router';
-import React from 'react';
-import { Platform, useColorScheme } from 'react-native';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSession } from '@/store/session';
+import { Palette } from '@/ui/platform';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+export default function RootLayout() {
+  const boot = useSession((s) => s.boot);
+  const restore = useSession((s) => s.restore);
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    void restore();
+  }, [restore]);
+
+  if (boot === 'loading') {
+    return (
+      <View style={styles.splash}>
+        <ActivityIndicator color={Palette.accent} size="large" />
+      </View>
+    );
+  }
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      {Platform.OS === 'ios' || !Platform.isTV ? (
-        <AnimatedSplashOverlay />
-      ) : null}
-      <AppTabs />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: Palette.background },
+          animation: 'fade',
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="(app)" />
+        <Stack.Screen
+          name="player"
+          options={{ presentation: 'fullScreenModal', animation: 'fade' }}
+        />
+      </Stack>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  splash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Palette.background,
+  },
+});
