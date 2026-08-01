@@ -22,6 +22,9 @@ export const Keys = {
   progress: 'xtream.progress.v1',
   seriesProgress: 'xtream.seriesProgress.v1',
   favorites: 'xtream.favorites.v1',
+  /** Offline download records. The video files themselves live on disk under
+   *  the app's private document directory, not in here. */
+  downloads: 'xtream.downloads.v1',
   /** Records that SecureStore failed and the password fell back to plain storage. */
   credentialStorageDegraded: 'xtream.credentialStorageDegraded',
 } as const;

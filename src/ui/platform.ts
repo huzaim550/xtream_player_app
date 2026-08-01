@@ -49,9 +49,32 @@ export const Layout = {
   focusScale: IS_TV ? 1.08 : 1,
   focusAnimationMs: 120,
   radius: IS_TV ? 12 : 8,
+
+  /**
+   * The featured banner at the top of Home.
+   *
+   * The server never sends wide artwork -- `backdrop_path` is hardcoded `[]` in
+   * both get_vod_info and get_series_info -- so the hero is built from the 2:3
+   * poster: a blurred, zoomed copy fills the panel and the crisp poster sits on
+   * top of it. These two numbers size that composition.
+   */
+  heroHeight: IS_TV ? 460 : 420,
+  heroPosterWidth: IS_TV ? 200 : 140,
+  /** How long each featured title holds before the banner advances. */
+  heroRotateMs: 8000,
+
+  /**
+   * media3's PlayerView already handles the D-pad correctly, and a custom
+   * overlay that misses one remote key makes a TV screen look frozen. So TV
+   * keeps the native transport and phones get our own overlay.
+   */
+  useNativeControls: IS_TV,
+  /** How long the phone control overlay stays up after the last interaction. */
+  controlsHideMs: 3500,
 } as const;
 
 export const Type = {
+  hero: IS_TV ? 44 : 30,
   title: IS_TV ? 34 : 24,
   heading: IS_TV ? 24 : 18,
   body: IS_TV ? 18 : 14,
@@ -70,6 +93,12 @@ export const Palette = {
   text: '#FFFFFF',
   textSecondary: '#A5ADBA',
   textMuted: '#6B7280',
+  /** Manzar red -- the wordmark, the play button, the active tab. */
+  brand: '#E11D2E',
+  brandBright: '#FF3B4E',
+  brandDeep: '#8B0F1C',
+  /** Kept for informational UI (links, spinners) so it stays distinct from
+   *  brand red, which now means "act on this". */
   accent: '#3C9FFE',
   focus: '#FFFFFF',
   danger: '#F0616D',

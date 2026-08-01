@@ -1,9 +1,16 @@
-# Xtream Player app
+# Manzar (Xtream Player app)
 
 React Native + Expo client (Android phone + Android TV / Fire Stick) for the
 self-hosted Xtream Codes server in `~/Documents/xtream` (live at
 `https://iptv.manzaronline.site`). The server is a separate repo and is
 **read-only** from this project's point of view — never modify it to suit the app.
+
+The app is branded **Manzar** (`app.config.ts` `name`). The slug
+(`xtream-player`), the scheme and the Android package id
+(`site.manzaronline.xtream`) deliberately keep their original values — the slug
+ties the project to its EAS id, and changing the package id would orphan every
+existing install's data. Brand assets in `assets/images/` are generated from the
+SVG sources; `Palette.brand` is the red that carries it through the UI.
 
 Expo has changed across versions: consult the versioned docs at
 https://docs.expo.dev/versions/v56.0.0/ before writing Expo-API code.
@@ -38,10 +45,40 @@ npm run typecheck
 - `src/app/**` — expo-router routes only; no logic. Screens read from stores.
 - `src/api/**` — the only code that talks to the server. `client.ts` is the
   single choke point; `normalize.ts` is the only place wire shapes are coerced.
+  `download.ts` owns the disk and the transfer, nothing about *which* titles.
 - `src/store/**` — zustand + AsyncStorage. Password lives in SecureStore only.
+  `progress.ts` and `downloads.ts` both denormalise title/poster/ext into each
+  record on purpose, so their screens render *and play* with no catalogue, no
+  session and no network.
 - `src/ui/**` — `Focusable` is the one interactive primitive (D-pad + touch);
   never use a bare Pressable/Touchable. Design tokens in `platform.ts` branch
   on `IS_TV` once — components must not.
+- `src/content/**` — long-form copy (the privacy policy) as data, so screens
+  stay pure presentation.
+
+Navigation is **five tabs** — Home, Movies, Series, Search, My List. Downloads,
+Settings, the privacy policy and sign-out live behind the header avatar
+(`AccountSheet`), and `AppHeader`'s `SUBPAGE_ROUTE` is what gives those pushed
+screens a back control. My List earns a tab because it is a browsing
+destination like the other four; Downloads is somewhere you visit occasionally.
+Six tabs on a phone makes every one of them too narrow to hit — do not add one
+without taking one away.
+
+## Offline downloads
+
+- Files live in `Paths.document/downloads` (app-private, invisible to the
+  gallery and other apps, gone on uninstall) — **never** `Paths.cache`, which
+  the system may delete mid-download. This is OS sandboxing, not encryption,
+  and `src/content/privacy.ts` says so.
+- One transfer at a time; the rest sit `queued`. Foreground only — the native
+  task's JS handle does not survive the process, so `hydrate()` re-marks
+  anything left mid-transfer as `failed` with a retry.
+- A finished download is played by passing `localUri` to `/player`, which then
+  builds **no** stream URL at all: no request, no connection slot, no network.
+  Progress is keyed on `movieKey`/`episodeKey`, so offline and streamed
+  playback share one resume position.
+- The same two server rules as playback apply to the transfer: build the URL
+  inside the start handler (connection slots), and set no `headers`.
 
 ## Server contract hazards (all verified against the server source)
 
@@ -57,6 +94,17 @@ npm run typecheck
   render as 1, 10, 2. Episode ids are strings (they are URL path segments).
 - Poster URLs carry an HMAC token — use them verbatim from responses, never
   construct one. `""` means no artwork.
+- **There is no wide artwork and no trailer.** `backdrop_path` is present but
+  hardcoded `[]` in both `get_vod_info` and `get_series_info`, and
+  `youtube_trailer` is always `""`. The only image is the 2:3 poster — which is
+  why `src/ui/Hero.tsx` composes its banner from a blurred copy of the poster
+  rather than fetching a backdrop. Do not "fix" this by building a URL.
+- **There is no popularity signal to rank by.** `get_vod_streams` hardcodes
+  `rating`, year, plot, cast and genre to empty in the *list* response (real
+  values only come from `get_vod_info`); series `rating` is hardcoded `"0"`
+  everywhere; and series `last_modified` is always the current time, so it is
+  useless for recency. Any chart must therefore be derived locally and labelled
+  honestly — see the Top 10 row in `(app)/home.tsx`.
 - Never set `headers` on a video source: OkHttp replays them onto the presigned
   R2 redirect and breaks the SigV4 signature.
 - First catalogue call after the server's 300s scan-cache expiry blocks on an

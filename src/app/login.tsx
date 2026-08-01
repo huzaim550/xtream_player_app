@@ -1,12 +1,19 @@
 /**
  * Sign-in.
  *
- * Two TV-specific concessions shape this screen: typing on a D-pad is painful,
- * so the server address is prefilled and the password can be revealed; and the
- * field order is wired explicitly with nextFocus* so Down always goes where it
- * looks like it should.
+ * The logic here is unchanged and deliberately conservative: the server answers
+ * bad credentials with HTTP 200 and auth:0, and it throttles an IP after 10
+ * failures in 5 minutes -- a throttle that also blocks /movie and /series. So
+ * nothing on this screen ever retries automatically, and the failure copy says
+ * plainly that waiting is the remedy, because a wrong password and a throttled
+ * IP are indistinguishable on the wire.
+ *
+ * Two TV concessions shape the layout: typing on a D-pad is painful, so the
+ * server address is prefilled and the password can be revealed.
  */
 
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -23,9 +30,10 @@ import { AuthError } from '@/api/errors';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
-import { IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
+import { ABSOLUTE_FILL, IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
 
 const DEFAULT_SERVER = process.env.EXPO_PUBLIC_DEFAULT_SERVER_URL ?? '';
+const GLOW = require('@/assets/images/logo-glow.png') as number;
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -52,9 +60,6 @@ export default function LoginScreen() {
       return;
     } catch (err) {
       if (err instanceof AuthError && !err.isExpired) {
-        // A throttled IP and a wrong password are indistinguishable on the
-        // wire -- both come back auth:0/Disabled. Since we cannot tell them
-        // apart, say so, because the wait is the only real remedy.
         setError(
           'Sign-in failed. Check your details — and if they are correct, wait five minutes: the server temporarily blocks repeated failed logins.',
         );
@@ -67,82 +72,111 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <FocusSection autoFocus style={styles.card}>
-          <Text style={styles.heading}>Sign in</Text>
-          <Text style={styles.sub}>Connect to your Xtream server.</Text>
+    <View style={styles.flex}>
+      {/* A wash of brand red bleeding out of the top, so the screen reads as
+          Manzar before a single word is typed. */}
+      <LinearGradient
+        colors={['rgba(225,29,46,0.22)', 'rgba(225,29,46,0.05)', Palette.background]}
+        locations={[0, 0.35, 1]}
+        style={ABSOLUTE_FILL}
+      />
 
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.brand}>
+            <Image source={GLOW} style={styles.glow} contentFit="contain" />
+            <Text style={styles.wordmark}>MANZAR</Text>
+            <Text style={styles.tagline}>Your library, everywhere.</Text>
+          </View>
 
-          <Text style={styles.label}>Server address</Text>
-          <TextInput
-            style={styles.input}
-            value={server}
-            onChangeText={setServer}
-            placeholder="https://example.com"
-            placeholderTextColor={Palette.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            inputMode="url"
-            returnKeyType="next"
-          />
+          <FocusSection autoFocus style={styles.card}>
+            {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="next"
-          />
+            <Text style={styles.label}>Server address</Text>
+            <TextInput
+              style={styles.input}
+              value={server}
+              onChangeText={setServer}
+              placeholder="https://example.com"
+              placeholderTextColor={Palette.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              inputMode="url"
+              returnKeyType="next"
+            />
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="go"
-            onSubmitEditing={submit}
-          />
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="username"
+              placeholderTextColor={Palette.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+            />
 
-          <Focusable onPress={() => setShowPassword((v) => !v)} style={styles.toggle}>
-            <Text style={styles.toggleText}>
-              {showPassword ? 'Hide password' : 'Show password'}
-            </Text>
-          </Focusable>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="password"
+              placeholderTextColor={Palette.textMuted}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              onSubmitEditing={submit}
+            />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Focusable onPress={() => setShowPassword((v) => !v)} style={styles.toggle}>
+              <Text style={styles.toggleText}>
+                {showPassword ? 'Hide password' : 'Show password'}
+              </Text>
+            </Focusable>
 
-          <Focusable onPress={submit} disabled={busy} style={styles.button}>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Focusable onPress={submit} disabled={busy} showFocusRing={false} style={styles.button}>
+              {({ focused }) => (
+                <View style={[styles.buttonInner, focused && styles.buttonFocused]}>
+                  {busy ? (
+                    <ActivityIndicator color={Palette.text} />
+                  ) : (
+                    <Text style={styles.buttonText}>Sign in</Text>
+                  )}
+                </View>
+              )}
+            </Focusable>
+
+            {failures >= 2 ? (
+              <Text style={styles.warn}>
+                {failures} failed attempts. The server blocks an address after 10 —
+                which also blocks playback, so double-check before retrying.
+              </Text>
+            ) : null}
+          </FocusSection>
+
+          <Focusable
+            onPress={() => router.push('/(app)/privacy')}
+            showFocusRing={false}
+            style={styles.legal}
+          >
             {({ focused }) => (
-              <View style={[styles.buttonInner, focused && styles.buttonFocused]}>
-                {busy ? (
-                  <ActivityIndicator color={Palette.text} />
-                ) : (
-                  <Text style={styles.buttonText}>Sign in</Text>
-                )}
-              </View>
+              <Text style={[styles.legalText, focused && styles.legalTextFocused]}>
+                Privacy Policy
+              </Text>
             )}
           </Focusable>
-
-          {failures >= 2 ? (
-            <Text style={styles.warn}>
-              {failures} failed attempts. The server blocks an address after 10 —
-              which also blocks playback, so double-check before retrying.
-            </Text>
-          ) : null}
-        </FocusSection>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -153,14 +187,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: OVERSCAN.horizontal,
+    paddingVertical: 32,
   },
-  card: { width: '100%', maxWidth: IS_TV ? 620 : 440 },
-  heading: { color: Palette.text, fontSize: Type.title, fontWeight: '700' },
-  sub: {
-    color: Palette.textSecondary,
-    fontSize: Type.body,
-    marginTop: 4,
-    marginBottom: 20,
+  brand: { alignItems: 'center', marginBottom: 8 },
+  glow: { width: 168, height: 168 },
+  wordmark: {
+    marginTop: -22,
+    color: Palette.brand,
+    fontSize: IS_TV ? 40 : 32,
+    fontWeight: '900',
+    letterSpacing: 6,
+  },
+  tagline: {
+    color: Palette.textMuted,
+    fontSize: Type.caption,
+    marginTop: 6,
+    letterSpacing: 1,
+  },
+  card: {
+    width: '100%',
+    maxWidth: IS_TV ? 620 : 440,
+    marginTop: 22,
+    backgroundColor: 'rgba(22,25,31,0.86)',
+    borderRadius: Layout.radius * 2,
+    borderWidth: 1,
+    borderColor: Palette.surfaceRaised,
+    padding: 22,
   },
   label: {
     color: Palette.textSecondary,
@@ -169,34 +221,44 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   input: {
-    backgroundColor: Palette.surface,
+    backgroundColor: Palette.background,
     borderRadius: Layout.radius,
     color: Palette.text,
     fontSize: Type.body,
     paddingHorizontal: 14,
-    paddingVertical: IS_TV ? 14 : 10,
+    paddingVertical: IS_TV ? 14 : 12,
     borderWidth: 1,
     borderColor: Palette.surfaceRaised,
   },
   toggle: { alignSelf: 'flex-start', marginTop: 10, padding: 6 },
   toggleText: { color: Palette.accent, fontSize: Type.caption },
-  button: { marginTop: 22 },
+  button: { marginTop: 20 },
   buttonInner: {
-    backgroundColor: Palette.accent,
+    backgroundColor: Palette.brand,
     borderRadius: Layout.radius,
-    paddingVertical: IS_TV ? 16 : 12,
+    paddingVertical: IS_TV ? 16 : 14,
     alignItems: 'center',
+    borderWidth: Layout.focusRingWidth,
+    borderColor: 'transparent',
   },
-  buttonFocused: { backgroundColor: '#5CB0FF' },
-  buttonText: { color: '#04121F', fontSize: Type.body, fontWeight: '700' },
+  buttonFocused: { borderColor: Palette.focus, backgroundColor: Palette.brandBright },
+  buttonText: {
+    color: Palette.text,
+    fontSize: Type.body,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   error: { color: Palette.danger, fontSize: Type.caption, marginTop: 14 },
   warn: { color: Palette.textMuted, fontSize: Type.caption, marginTop: 14 },
   notice: {
     color: Palette.textSecondary,
     fontSize: Type.caption,
-    backgroundColor: Palette.surface,
+    backgroundColor: Palette.background,
     borderRadius: Layout.radius,
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 4,
   },
+  legal: { marginTop: 24, padding: 8 },
+  legalText: { color: Palette.textMuted, fontSize: Type.caption },
+  legalTextFocused: { color: Palette.text },
 });

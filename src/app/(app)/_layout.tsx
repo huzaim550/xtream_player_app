@@ -19,8 +19,17 @@ import { IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
+/**
+ * Five items, deliberately.
+ *
+ * Settings and Downloads used to compete for a slot here. Both moved behind the
+ * header avatar instead: Settings is rarely opened, and Downloads is somewhere
+ * you visit occasionally rather than browse. My List earns a tab because it is
+ * a browsing destination like the other four. Six tabs on a phone makes every
+ * one of them too narrow to hit reliably.
+ */
 const NAV: readonly {
-  href: '/(app)/home' | '/(app)/movies' | '/(app)/series' | '/(app)/search' | '/(app)/favorites' | '/(app)/settings';
+  href: '/(app)/home' | '/(app)/movies' | '/(app)/series' | '/(app)/search' | '/(app)/my-list';
   label: string;
   icon: IoniconName;
   iconActive: IoniconName;
@@ -29,8 +38,7 @@ const NAV: readonly {
   { href: '/(app)/movies', label: 'Movies', icon: 'film-outline', iconActive: 'film' },
   { href: '/(app)/series', label: 'Series', icon: 'tv-outline', iconActive: 'tv' },
   { href: '/(app)/search', label: 'Search', icon: 'search-outline', iconActive: 'search' },
-  { href: '/(app)/favorites', label: 'Saved', icon: 'bookmark-outline', iconActive: 'bookmark' },
-  { href: '/(app)/settings', label: 'Settings', icon: 'settings-outline', iconActive: 'settings' },
+  { href: '/(app)/my-list', label: 'My List', icon: 'bookmark-outline', iconActive: 'bookmark' },
 ] as const;
 
 export default function AppLayout() {
@@ -75,7 +83,7 @@ export default function AppLayout() {
             key={item.href}
             onPress={() => router.navigate(item.href)}
             showFocusRing={false}
-            style={IS_TV ? styles.railItem : styles.tabItem}
+            containerStyle={IS_TV ? styles.railItem : styles.tabItem}
           >
             {({ focused }) => (
               <View
@@ -88,10 +96,16 @@ export default function AppLayout() {
                 <Ionicons
                   name={active || focused ? item.iconActive : item.icon}
                   size={IS_TV ? 20 : 22}
-                  color={active || focused ? Palette.text : Palette.textMuted}
+                  color={
+                    active ? Palette.brand : focused ? Palette.text : Palette.textMuted
+                  }
                 />
                 <Text
-                  style={[styles.navLabel, (focused || active) && styles.navLabelOn]}
+                  style={[
+                    styles.navLabel,
+                    focused && styles.navLabelOn,
+                    active && styles.navLabelActive,
+                  ]}
                   numberOfLines={1}
                 >
                   {item.label}
@@ -154,9 +168,10 @@ const styles = StyleSheet.create({
   tabInner: { alignItems: 'center', gap: 3, paddingVertical: 6, borderRadius: Layout.radius },
 
   navFocused: { backgroundColor: Palette.surfaceRaised },
-  navActive: { backgroundColor: Palette.surfaceRaised },
+  navActive: { backgroundColor: 'transparent' },
   navLabel: { color: Palette.textMuted, fontSize: Type.caption },
   navLabelOn: { color: Palette.text, fontWeight: '600' },
+  navLabelActive: { color: Palette.brand, fontWeight: '700' },
 
   offline: {
     backgroundColor: Palette.surfaceRaised,

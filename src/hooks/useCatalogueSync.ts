@@ -9,6 +9,7 @@
 import { useEffect } from 'react';
 import { AuthError } from '@/api/errors';
 import { useCatalogue } from '@/store/catalogue';
+import { useDownloads } from '@/store/downloads';
 import { useFavorites } from '@/store/favorites';
 import { useProgress } from '@/store/progress';
 import { useSession } from '@/store/session';
@@ -20,12 +21,16 @@ export function useCatalogueSync() {
   const hydrated = useCatalogue((s) => s.hydrated);
   const hydrateProgress = useProgress((s) => s.hydrate);
   const hydrateFavorites = useFavorites((s) => s.hydrate);
+  // Also reconciles records against the disk: a 'done' entry whose file has
+  // gone, and anything left mid-transfer when the process died.
+  const hydrateDownloads = useDownloads((s) => s.hydrate);
 
   useEffect(() => {
     void hydrateCatalogue();
     void hydrateProgress();
     void hydrateFavorites();
-  }, [hydrateCatalogue, hydrateProgress, hydrateFavorites]);
+    void hydrateDownloads();
+  }, [hydrateCatalogue, hydrateProgress, hydrateFavorites, hydrateDownloads]);
 
   useEffect(() => {
     if (!session || !hydrated) return;

@@ -9,26 +9,25 @@
 
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useCatalogue } from '@/store/catalogue';
 import { useProgress, movieKey } from '@/store/progress';
-import { Focusable } from '@/ui/Focusable';
-import { FocusSection } from '@/ui/FocusSection';
+import { ALL_CATEGORIES, CategoryChips } from '@/ui/CategoryChips';
 import { PosterGrid } from '@/ui/PosterGrid';
-import { Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
-
-const ALL = '__all__';
+import { Palette } from '@/ui/platform';
 
 export default function MoviesScreen() {
   const router = useRouter();
   const data = useCatalogue((s) => s.data);
   const loading = useCatalogue((s) => s.loading);
   const entries = useProgress((s) => s.entries);
-  const [categoryId, setCategoryId] = useState<string>(ALL);
+  const [categoryId, setCategoryId] = useState<string>(ALL_CATEGORIES);
 
   const movies = useMemo(() => {
     const all = data?.movies ?? [];
-    return categoryId === ALL ? all : all.filter((m) => m.categoryId === categoryId);
+    return categoryId === ALL_CATEGORIES
+      ? all
+      : all.filter((m) => m.categoryId === categoryId);
   }, [data, categoryId]);
 
   const items = useMemo(
@@ -52,29 +51,23 @@ export default function MoviesScreen() {
 
   const categories = data?.movieCategories ?? [];
 
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const m of data?.movies ?? []) {
+      out[m.categoryId] = (out[m.categoryId] ?? 0) + 1;
+    }
+    return out;
+  }, [data]);
+
   return (
     <View style={styles.flex}>
-      <FocusSection autoFocus style={styles.railWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.rail}
-        >
-          <CategoryChip
-            label="All"
-            active={categoryId === ALL}
-            onPress={() => setCategoryId(ALL)}
-          />
-          {categories.map((c) => (
-            <CategoryChip
-              key={c.id}
-              label={c.name}
-              active={categoryId === c.id}
-              onPress={() => setCategoryId(c.id)}
-            />
-          ))}
-        </ScrollView>
-      </FocusSection>
+      <CategoryChips
+        categories={categories}
+        selected={categoryId}
+        onSelect={setCategoryId}
+        counts={counts}
+        totalCount={data?.movies.length}
+      />
 
       <PosterGrid
         items={items}
@@ -85,49 +78,6 @@ export default function MoviesScreen() {
   );
 }
 
-function CategoryChip({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Focusable onPress={onPress} showFocusRing={false} style={styles.chipOuter}>
-      {({ focused }) => (
-        <View
-          style={[
-            styles.chip,
-            active && styles.chipActive,
-            focused && styles.chipFocused,
-          ]}
-        >
-          <Text style={[styles.chipText, active && styles.chipTextActive]}>
-            {label}
-          </Text>
-        </View>
-      )}
-    </Focusable>
-  );
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Palette.background },
-  railWrap: { paddingTop: OVERSCAN.vertical },
-  rail: { paddingHorizontal: OVERSCAN.horizontal, gap: 8 },
-  chipOuter: { marginRight: 8 },
-  chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: Palette.surface,
-    borderWidth: Layout.focusRingWidth,
-    borderColor: 'transparent',
-  },
-  chipActive: { backgroundColor: Palette.surfaceRaised },
-  chipFocused: { borderColor: Palette.focus },
-  chipText: { color: Palette.textSecondary, fontSize: Type.caption },
-  chipTextActive: { color: Palette.text, fontWeight: '600' },
 });

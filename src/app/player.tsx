@@ -1,15 +1,17 @@
 /**
  * Playback.
  *
- * Phase A deliberately uses expo-video's native controls: media3's PlayerView
- * already handles the D-pad on TV and touch on a phone correctly, so shipping
- * this first validates the real risk (codec support on cheap hardware) without
- * spending days on a custom overlay that might be built on sand.
- *
- * Three things here are load-bearing and easy to break:
+ * Four things here are load-bearing and easy to break:
  *  - the stream URL is built HERE, at play time, never earlier (connection slots)
  *  - no `headers` on the source (they would replay onto the presigned R2 redirect)
  *  - progress is flushed on background, not just unmount (the TV home button)
+ *  - a `localUri` param wins over everything: a downloaded file plays straight
+ *    off disk, which means no request, no connection slot, and no network
+ *
+ * Controls are split by platform in one place only -- Layout.useNativeControls.
+ * media3's PlayerView already handles the D-pad correctly, and a custom overlay
+ * that misses one remote key makes a TV look frozen, so TV keeps the native
+ * transport while phones get src/ui/PlayerControls.tsx.
  */
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -31,7 +33,11 @@ import { episodeStreamUrl, movieStreamUrl } from '@/api/streamUrl';
 import { useProgress, episodeKey, movieKey } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
+import { PlayerControls } from '@/ui/PlayerControls';
 import { ABSOLUTE_FILL, IS_TV, Layout, Palette, Type } from '@/ui/platform';
+
+/** How long the "next episode" card counts down before it plays itself. */
+const AUTOPLAY_SECONDS = 10;
 
 export default function PlayerScreen() {
   useKeepAwake();
@@ -40,6 +46,7 @@ export default function PlayerScreen() {
   // The rest of the app is portrait-locked (app.config.ts), so playback needs
   // its own override -- landscape on the way in, back to portrait on the way
   // out, regardless of how this screen is left (back, error, or unmount).
+  // A TV has no orientation to lock.
   useEffect(() => {
     if (IS_TV) return;
     void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
@@ -65,25 +72,37 @@ export default function PlayerScreen() {
     episodeNum?: string;
     /** '1' when the user explicitly chose "Start over". */
     restart?: string;
+    /** file:// path of a completed download. Wins over the network source. */
+    localUri?: string;
+    /** The episode after this one, handed over by the series screen so the
+     *  player can auto-advance without calling get_series_info. */
+    nextId?: string;
+    nextExt?: string;
+    nextTitle?: string;
+    nextSeason?: string;
+    nextEpisodeNum?: string;
   }>();
 
   const kind = params.kind === 'episode' ? 'episode' : 'movie';
   const entryKey = kind === 'movie' ? movieKey(params.id) : episodeKey(params.id);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const hasSeeked = useRef(false);
   // Captured once: "Start over" must win over whatever is stored, and the
   // stored value would otherwise change under us as we write progress.
   const resumeTarget = useRef(params.restart === '1' ? 0 : resumeAtFor(entryKey));
 
-  // Built here and nowhere else. Every request to this URL takes a connection
-  // slot the server holds for 30 minutes, so it must never be constructed
-  // on mount of a list or a detail screen.
-  const uri = session
-    ? kind === 'movie'
-      ? movieStreamUrl(session, Number(params.id), params.ext || 'mp4')
-      : episodeStreamUrl(session, params.id, params.ext || 'mp4')
-    : null;
+  // A downloaded file needs no server round trip at all. Otherwise the URL is
+  // built here and nowhere else, because every request to it takes a connection
+  // slot the server holds for 30 minutes.
+  const uri = params.localUri
+    ? params.localUri
+    : session
+      ? kind === 'movie'
+        ? movieStreamUrl(session, Number(params.id), params.ext || 'mp4')
+        : episodeStreamUrl(session, params.id, params.ext || 'mp4')
+      : null;
 
   const player = useVideoPlayer(uri ? { uri, contentType: 'auto' } : null, (p) => {
     p.timeUpdateEventInterval = 1;
@@ -113,6 +132,28 @@ export default function PlayerScreen() {
     });
   }, [player, record, entryKey, kind, params]);
 
+  const playNext = useCallback(() => {
+    if (!params.nextId) return;
+    save();
+    void flush();
+    // replace, not push: otherwise Back walks the user through every episode
+    // they auto-advanced through.
+    router.replace({
+      pathname: '/player',
+      params: {
+        kind: 'episode',
+        id: params.nextId,
+        ext: params.nextExt ?? 'mp4',
+        title: params.nextTitle ?? '',
+        seriesId: params.seriesId,
+        seriesName: params.seriesName,
+        season: params.nextSeason,
+        episodeNum: params.nextEpisodeNum,
+        posterUrl: params.posterUrl,
+      },
+    });
+  }, [params, router, save, flush]);
+
   // Seek only once the source is loaded -- setting currentTime earlier is a
   // no-op. sourceLoad can fire again (e.g. after a track change), so the ref
   // stops a mid-film re-seek.
@@ -133,6 +174,22 @@ export default function PlayerScreen() {
       setError(err?.message ?? 'This file could not be played.');
     }
   });
+
+  // End of an episode with another one waiting: offer it, and take the offer if
+  // the user does nothing.
+  useEventListener(player, 'playToEnd', () => {
+    if (params.nextId) setCountdown(AUTOPLAY_SECONDS);
+  });
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      playNext();
+      return;
+    }
+    const t = setTimeout(() => setCountdown((c) => (c === null ? null : c - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [countdown, playNext]);
 
   // The TV home button skips unmount entirely, and it is the most common way a
   // session ends on a Fire Stick -- so backgrounding must checkpoint.
@@ -164,10 +221,18 @@ export default function PlayerScreen() {
     [save, flush],
   );
 
-  if (!session || !uri) {
+  if (!session && !params.localUri) {
     return (
       <View style={styles.center}>
         <Text style={styles.error}>Not signed in.</Text>
+      </View>
+    );
+  }
+
+  if (!uri) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>Nothing to play.</Text>
       </View>
     );
   }
@@ -178,7 +243,7 @@ export default function PlayerScreen() {
   // (user, ip) rather than consuming a second one.
   const openExternally = () =>
     IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-      data: uri ?? undefined,
+      data: uri,
       type: 'video/*',
       flags: 268435456, // FLAG_ACTIVITY_NEW_TASK
     }).catch(() => setError('No other video player is installed on this device.'));
@@ -202,18 +267,51 @@ export default function PlayerScreen() {
     );
   }
 
+  const episodeLabel =
+    kind === 'episode' && params.season
+      ? `${params.seriesName ?? ''} · S${params.season}E${params.episodeNum}`
+      : undefined;
+
   return (
     <View style={styles.root}>
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}
-        nativeControls
+        nativeControls={Layout.useNativeControls}
         contentFit="contain"
-        fullscreenOptions={{ enable: !IS_TV }}
+        fullscreenOptions={{ enable: !Layout.useNativeControls }}
       />
+
       {!ready ? (
         <View style={styles.center} pointerEvents="none">
-          <ActivityIndicator color={Palette.accent} size="large" />
+          <ActivityIndicator color={Palette.brand} size="large" />
+        </View>
+      ) : null}
+
+      {ready && !Layout.useNativeControls && countdown === null ? (
+        <PlayerControls
+          player={player}
+          title={params.title || 'Playing'}
+          subtitle={episodeLabel}
+          onBack={() => router.back()}
+          onOpenExternally={openExternally}
+        />
+      ) : null}
+
+      {countdown !== null ? (
+        <View style={styles.nextCard}>
+          <Text style={styles.nextLabel}>Next episode</Text>
+          <Text style={styles.nextTitle} numberOfLines={2}>
+            S{params.nextSeason}E{params.nextEpisodeNum} · {params.nextTitle}
+          </Text>
+          <View style={styles.nextButtons}>
+            <Focusable onPress={playNext} style={styles.button} hasTVPreferredFocus>
+              <Text style={styles.buttonText}>Play now ({countdown})</Text>
+            </Focusable>
+            <Focusable onPress={() => setCountdown(null)} style={styles.buttonSecondary}>
+              <Text style={styles.buttonSecondaryText}>Cancel</Text>
+            </Focusable>
+          </View>
         </View>
       ) : null}
     </View>
@@ -245,12 +343,12 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 24,
-    backgroundColor: Palette.accent,
+    backgroundColor: Palette.brand,
     borderRadius: Layout.radius,
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
-  buttonText: { color: '#04121F', fontSize: Type.body, fontWeight: '700' },
+  buttonText: { color: Palette.text, fontSize: Type.body, fontWeight: '700' },
   buttonSecondary: {
     marginTop: 12,
     backgroundColor: Palette.surfaceRaised,
@@ -259,4 +357,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   buttonSecondaryText: { color: Palette.text, fontSize: Type.body, fontWeight: '600' },
+
+  nextCard: {
+    position: 'absolute',
+    right: 24,
+    bottom: 24,
+    maxWidth: 420,
+    padding: 18,
+    borderRadius: Layout.radius,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+  },
+  nextLabel: {
+    color: Palette.textMuted,
+    fontSize: Type.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  nextTitle: {
+    color: Palette.text,
+    fontSize: Type.body,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  nextButtons: { flexDirection: 'row', gap: 12, alignItems: 'center' },
 });

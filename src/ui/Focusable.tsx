@@ -30,7 +30,20 @@ export interface FocusableRenderState {
 
 export interface FocusableProps extends Omit<PressableProps, 'children' | 'style'> {
   children: React.ReactNode | ((state: FocusableRenderState) => React.ReactNode);
+  /** Style for the pressable itself -- padding, background, borders. */
   style?: StyleProp<ViewStyle>;
+  /**
+   * Style for the outer wrapper (the one carrying the TV focus scale).
+   *
+   * Needed whenever this element gets its size from its *parent* rather than
+   * from its children -- `position: absolute` fills and `flex: 1`. `style`
+   * lands on the inner Pressable, whose parent is this wrapper; if the wrapper
+   * is auto-sized, an absolutely positioned Pressable resolves against a
+   * zero-height box and the control becomes untappable while still rendering.
+   * Anything sized by its content (a poster, a button with a label) does not
+   * need this.
+   */
+  containerStyle?: StyleProp<ViewStyle>;
   /** Draw the default focus ring and scale. Off for things that style
    *  themselves entirely, like a poster card with its own overlay. */
   showFocusRing?: boolean;
@@ -44,6 +57,7 @@ export const Focusable = forwardRef<View, FocusableProps>(function Focusable(
   {
     children,
     style,
+    containerStyle,
     showFocusRing = true,
     onFocusEnter,
     onFocus,
@@ -87,7 +101,9 @@ export const Focusable = forwardRef<View, FocusableProps>(function Focusable(
   );
 
   return (
-    <Animated.View style={IS_TV ? { transform: [{ scale }] } : undefined}>
+    <Animated.View
+      style={[containerStyle, IS_TV ? { transform: [{ scale }] } : null]}
+    >
       <Pressable
         ref={ref}
         onFocus={handleFocus}

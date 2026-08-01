@@ -19,7 +19,11 @@ const allowCleartext = process.env.NODE_ENV !== 'production';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'Xtream',
+  name: 'Manzar',
+  // slug, scheme and the Android package id deliberately keep their original
+  // values: the slug is what ties this project to its EAS id, and changing the
+  // package id would make the store treat it as a different app and orphan
+  // every existing install's data.
   slug: 'xtream-player',
   scheme: 'xtreamplayer',
   version: '1.0.0',
@@ -35,7 +39,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-splash-screen',
       {
         backgroundColor: '#0B0D10',
-        android: { image: './assets/images/splash-icon.png', imageWidth: 76 },
+        // The mark is the whole splash, so it gets real size -- 76px was a
+        // template default sized for a small glyph.
+        android: { image: './assets/images/splash-icon.png', imageWidth: 180 },
       },
     ],
     ['expo-build-properties', { android: { usesCleartextTraffic: allowCleartext } }],

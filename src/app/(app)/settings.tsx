@@ -10,8 +10,10 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
 import { useCatalogue } from '@/store/catalogue';
+import { useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
@@ -31,6 +33,9 @@ export default function SettingsScreen() {
   const refresh = useCatalogue((s) => s.refresh);
   const loading = useCatalogue((s) => s.loading);
   const clearProgress = useProgress((s) => s.clearAll);
+  const downloadEntries = useDownloads((s) => s.entries);
+  const bytesUsed = useDownloads((s) => s.bytesUsed);
+  const clearDownloads = useDownloads((s) => s.clearAll);
 
   const [probe, setProbe] = useState<RawHealth | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
@@ -89,6 +94,15 @@ export default function SettingsScreen() {
         />
       </Section>
 
+      <Section title="Downloads">
+        <Row label="Saved offline" value={`${Object.keys(downloadEntries).length} titles`} />
+        <Row label="Storage used" value={formatBytes(bytesUsed())} />
+        <Text style={styles.hint}>
+          Downloads are stored inside this app only. They are not visible to your
+          gallery or other apps, and are removed if you uninstall Manzar.
+        </Text>
+      </Section>
+
       {probe || probeError ? (
         <Section title="Server health">
           {probeError ? (
@@ -113,7 +127,14 @@ export default function SettingsScreen() {
           onPress={() => session && refresh(session, { force: true })}
         />
         <Action label="Check server" onPress={runProbe} />
+        <Action label="Manage downloads" onPress={() => router.push('/(app)/downloads')} />
+        <Action label="Privacy Policy" onPress={() => router.push('/(app)/privacy')} />
         <Action label="Clear watch history" onPress={() => void clearProgress()} />
+        <Action
+          label="Delete all downloads"
+          danger
+          onPress={() => void clearDownloads()}
+        />
         <Action
           label="Sign out"
           danger
@@ -196,6 +217,12 @@ const styles = StyleSheet.create({
   rowLabel: { color: Palette.textMuted, fontSize: Type.body },
   rowValue: { color: Palette.text, fontSize: Type.body, flexShrink: 1 },
   warn: { color: Palette.danger, fontSize: Type.caption, marginTop: 10 },
+  hint: {
+    color: Palette.textMuted,
+    fontSize: Type.caption,
+    lineHeight: Type.caption * 1.5,
+    marginTop: 10,
+  },
   actions: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
   actionOuter: { marginRight: 12, marginBottom: 12 },
   action: {

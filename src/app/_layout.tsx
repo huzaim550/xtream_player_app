@@ -1,26 +1,29 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '@/store/session';
+import { BrandSplash } from '@/ui/BrandSplash';
 import { Palette } from '@/ui/platform';
+
+/** Long enough for the brand animation to land. See BrandSplash. */
+const MIN_SPLASH_MS = 1400;
 
 export default function RootLayout() {
   const boot = useSession((s) => s.boot);
   const restore = useSession((s) => s.restore);
+  const [minElapsed, setMinElapsed] = useState(false);
 
   useEffect(() => {
     void restore();
   }, [restore]);
 
-  if (boot === 'loading') {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator color={Palette.accent} size="large" />
-      </View>
-    );
-  }
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (boot === 'loading' || !minElapsed) return <BrandSplash />;
 
   return (
     <SafeAreaProvider>
@@ -43,12 +46,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Palette.background,
-  },
-});
