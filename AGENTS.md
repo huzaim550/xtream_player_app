@@ -22,7 +22,27 @@ npm run android:tv      # TV variant  -> emulator TV_1080p (or a Fire Stick)
 npm run android:phone   # phone variant
 npm start               # Metro (dev client; Expo Go can NOT run this app)
 npm run typecheck
+npm test                # jest (unit only -- see jest.config.js for why)
 ```
+
+## Shipping a fix
+
+`expo-updates` is configured against the EAS project, so **JS-only fixes go out
+over the air** — `eas update --branch <channel>` — with no rebuild or reinstall.
+
+`runtimeVersion` uses the `appVersion` policy, which makes `version` in
+`app.config.ts` the compatibility contract: **bump it whenever you add or
+remove a native module.** If you don't, old installs will happily download JS
+that calls a native module their APK does not contain, and crash at startup —
+which is exactly what adding `expo-file-system` did once already. Native
+changes always need a real build and a reinstall.
+
+When something does crash, `(app)/diagnostics.tsx` (Settings → Diagnostics)
+shows the last 20 errors with stack traces, read from disk so the crash from
+the *previous* launch is the one you see. It is local-only on purpose: a hosted
+crash reporter would contradict `src/content/privacy.ts`. Everything written
+there passes through `redact()` first, because stream URLs carry the password
+as a path segment — `src/store/__tests__/crashLog.test.ts` guards that.
 
 - **Expo SDK 56, pinned.** `react-native` is aliased to `react-native-tvos@0.85-stable`.
   Never `expo upgrade` without confirming a matching `<version>-stable` tag exists

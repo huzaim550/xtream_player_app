@@ -29,6 +29,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: '1.0.0',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
+  /**
+   * Over-the-air updates.
+   *
+   * `runtimeVersion` is the compatibility contract between a JS bundle and the
+   * native binary that runs it. The `appVersion` policy ties it to `version`
+   * above, which means: bump `version` whenever you add or remove a native
+   * module, and old installs correctly stop accepting new JS instead of
+   * crashing on a module that is not in their APK. That failure mode is not
+   * hypothetical here -- adding expo-file-system did exactly that.
+   */
+  runtimeVersion: { policy: 'appVersion' },
+  updates: {
+    url: 'https://u.expo.dev/0f30553e-a11e-404c-9de0-31edfb91167f',
+    // Never block the splash on a network round trip. The server is behind a
+    // Cloudflare tunnel and a cold call can take ~10s; the app launches on the
+    // bundle it already has and picks up the new one next launch.
+    fallbackToCacheTimeout: 0,
+  },
   android: {
     ...config.android,
     package: 'site.manzaronline.xtream',

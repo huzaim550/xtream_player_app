@@ -127,6 +127,7 @@ export default function SettingsScreen() {
           onPress={() => session && refresh(session, { force: true })}
         />
         <Action label="Check server" onPress={runProbe} />
+        <Action label="Diagnostics" onPress={() => router.push('/(app)/diagnostics')} />
         <Action label="Manage downloads" onPress={() => router.push('/(app)/downloads')} />
         <Action label="Privacy Policy" onPress={() => router.push('/(app)/privacy')} />
         <Action label="Clear watch history" onPress={() => void clearProgress()} />

@@ -25,6 +25,8 @@ export const Keys = {
   /** Offline download records. The video files themselves live on disk under
    *  the app's private document directory, not in here. */
   downloads: 'xtream.downloads.v1',
+  /** Recent crashes, redacted. Local only -- see store/crashLog.ts. */
+  crashLog: 'xtream.crashLog.v1',
   /** Records that SecureStore failed and the password fell back to plain storage. */
   credentialStorageDegraded: 'xtream.credentialStorageDegraded',
 } as const;
