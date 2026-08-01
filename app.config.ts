@@ -41,7 +41,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
    */
   runtimeVersion: { policy: 'appVersion' },
   updates: {
-    url: 'https://u.expo.dev/0f30553e-a11e-404c-9de0-31edfb91167f',
+    // Self-hosted update server (the mybuild box at home), published over
+    // HTTPS through a Cloudflare tunnel so installs reach it from anywhere,
+    // not just the home LAN. Not EAS Update — the previous endpoint was
+    // https://u.expo.dev/0f30553e-a11e-404c-9de0-31edfb91167f.
+    // HTTPS also matters because usesCleartextTraffic is false in release
+    // builds (see allowCleartext above), which would block a plain-http URL.
+    url: 'https://updates.manzaronline.site/api/updates/xtream-player-app/manifest',
+    requestHeaders: { 'expo-channel-name': 'production' },
     // Never block the splash on a network round trip. The server is behind a
     // Cloudflare tunnel and a cold call can take ~10s; the app launches on the
     // bundle it already has and picks up the new one next launch.
@@ -50,6 +57,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     ...config.android,
     package: 'site.manzaronline.xtream',
+    /**
+     * Must be set explicitly and bumped on every release build. Without it
+     * prebuild hardcodes `versionCode 1`, so the in-app "new version
+     * available" check has nothing to compare and never fires. This is the
+     * integer Android orders installs by; `version` above is only the label.
+     */
+    versionCode: 2,
   },
   plugins: [
     'expo-router',

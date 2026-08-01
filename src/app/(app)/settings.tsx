@@ -99,7 +99,7 @@ export default function SettingsScreen() {
         <Row label="Storage used" value={formatBytes(bytesUsed())} />
         <Text style={styles.hint}>
           Downloads are stored inside this app only. They are not visible to your
-          gallery or other apps, and are removed if you uninstall Manzar.
+          gallery or other apps, and are removed if you uninstall Manzar.And can be only viewed in the app.
         </Text>
       </Section>
 
