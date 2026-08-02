@@ -6,8 +6,11 @@
  *
  * Every claim below was checked against the code that makes it true:
  *   - src/store/persist.ts  -- what is stored, and in which of the two backends
- *   - src/api/client.ts     -- the only outbound requests the app makes
+ *   - src/api/client.ts     -- every request to the media server
  *   - src/api/download.ts   -- where downloaded video lands
+ *   - src/hooks/useAppUpdate.ts, src/store/notifications.ts, and `updates` in
+ *     app.config.ts -- the requests to the update server, the only other host
+ *     this app contacts
  *   - src/app/(app)/settings.tsx -- the deletion controls named here
  * If any of those change, this file has to change with them.
  */
@@ -37,7 +40,8 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
   {
     heading: 'What leaves your device',
     body: [
-      'The app talks to exactly one host: the server address you entered. It sends your username and password with each request, because that is how the Xtream protocol authenticates.',
+      'The app talks to two hosts. The first is the server address you entered. It sends your username and password with each request, because that is how the Xtream protocol authenticates.',
+      'The second is Manzar’s own update server. The app asks it three things: whether a newer version of the app exists, whether there is a background update to install, and whether there are any announcements to show on the Notifications screen. Those requests carry nothing about you — no username, no account details, no device identifier, and nothing about what you watch. Like any web server, it does see your IP address.',
       'When you play or download something, your server answers with a redirect to its own storage provider, and your device then fetches the video from there directly. That storage provider sees your IP address, as it would for any file download.',
       'There are no other network calls. No crash reporting, no telemetry, no advertising identifiers, no social logins.',
     ],

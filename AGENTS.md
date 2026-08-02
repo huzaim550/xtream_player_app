@@ -77,9 +77,10 @@ as a path segment — `src/store/__tests__/crashLog.test.ts` guards that.
   stay pure presentation.
 
 Navigation is **five tabs** — Home, Movies, Series, Search, My List. Downloads,
-Settings, the privacy policy and sign-out live behind the header avatar
-(`AccountSheet`), and `AppHeader`'s `SUBPAGE_ROUTE` is what gives those pushed
-screens a back control. My List earns a tab because it is a browsing
+Notifications, Settings, the privacy policy and sign-out live behind the header
+avatar (`AccountSheet`), and `AppHeader`'s `SUBPAGE_ROUTE` is what gives those
+pushed screens a back control. The bell beside the avatar is the one shortcut
+that earned space in the header: a badge nobody can find is not a notification. My List earns a tab because it is a browsing
 destination like the other four; Downloads is somewhere you visit occasionally.
 Six tabs on a phone makes every one of them too narrow to hit — do not add one
 without taking one away.
@@ -99,6 +100,31 @@ without taking one away.
   playback share one resume position.
 - The same two server rules as playback apply to the transfer: build the URL
   inside the start handler (connection slots), and set no `headers`.
+
+## In-app notifications
+
+Announcements composed on the mybuild dashboard (`/notifications`) and **pulled**
+by the app: `src/store/notifications.ts` polls
+`updates.manzaronline.site/api/notifications/xtream-player-app` on launch and on
+foreground, rate-limited to one request per five minutes. There is no push, no
+device token and no registration — which is exactly why the whole feature
+shipped over the air with no native module and no new APK. A closed app shows
+nothing until it is next opened; that is the deal, and the dashboard says so.
+
+- A sync **replaces** the list rather than merging it, so retracting a message on
+  the dashboard actually removes it. A failed poll changes nothing, so the inbox
+  still reads offline.
+- Read state is local and separate from the list; marks for messages that stop
+  being served are pruned on each sync so the file cannot grow forever.
+- `coerce()` in the store is the only place a wire record becomes an app record —
+  same rule as `src/api/normalize.ts`. `linkUrl` is re-checked for `http(s)` on
+  the device even though the server already refuses anything else, because that
+  URL goes to the system browser.
+- Two surfaces, one store: the bell badge in `AppHeader` plus the inbox at
+  `(app)/notifications.tsx`, and `NotificationBanner` in the `(app)` layout,
+  which shows only the newest unread one and is always dismissible.
+- `src/content/privacy.ts` names this call. If the app ever sends anything about
+  the user to that host, that file has to change with it.
 
 ## Server contract hazards (all verified against the server source)
 

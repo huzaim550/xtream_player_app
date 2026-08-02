@@ -26,7 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // every existing install's data.
   slug: 'xtream-player',
   scheme: 'xtreamplayer',
-  version: '1.0.0',
+  version: '1.1.0',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   /**
@@ -63,7 +63,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * available" check has nothing to compare and never fires. This is the
      * integer Android orders installs by; `version` above is only the label.
      */
-    versionCode: 2,
+    versionCode: 3,
   },
   plugins: [
     'expo-router',

@@ -7,7 +7,9 @@
  *
  * The avatar on the right is the entry point to everything account-shaped:
  * Settings, the privacy policy and sign-out all live behind it, which is what
- * keeps the tab bar down to five items.
+ * keeps the tab bar down to five items. The bell beside it is the one thing
+ * that earns its own place up here: a badge nobody can find is not a
+ * notification.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +18,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNotifications } from '@/store/notifications';
 import { useSession } from '@/store/session';
 import { AccountSheet } from './AccountSheet';
 import { Focusable } from './Focusable';
@@ -26,13 +29,14 @@ const LOGO = require('@/assets/images/logo-mark.png') as number;
 /** Routes that are pushed on top of a tab and therefore want a back control. */
 const DETAIL_ROUTE = /^\/(movie|series)\//;
 /** Routes reached from the account sheet rather than the tab bar. */
-const SUBPAGE_ROUTE = /^\/(settings|privacy|downloads|diagnostics)$/;
+const SUBPAGE_ROUTE = /^\/(settings|privacy|downloads|diagnostics|notifications)$/;
 
 export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const username = useSession((s) => s.account?.username ?? s.session?.username ?? '');
+  const unread = useNotifications((s) => s.unreadCount());
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const showBack = DETAIL_ROUTE.test(pathname) || SUBPAGE_ROUTE.test(pathname);
@@ -55,20 +59,45 @@ export function AppHeader() {
           </View>
         )}
 
-        <Focusable
-          onPress={() => setSheetOpen(true)}
-          showFocusRing={false}
-          accessibilityLabel="Account"
-          style={styles.side}
-        >
-          {({ focused }) => (
-            <View style={[styles.avatar, focused && styles.avatarFocused]}>
-              <Text style={styles.avatarText}>
-                {(username || '?').slice(0, 1).toUpperCase()}
-              </Text>
-            </View>
-          )}
-        </Focusable>
+        <View style={styles.right}>
+          <Focusable
+            onPress={() => router.navigate('/(app)/notifications')}
+            showFocusRing={false}
+            accessibilityLabel={
+              unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'
+            }
+          >
+            {({ focused }) => (
+              <View style={[styles.iconButton, focused && styles.iconButtonFocused]}>
+                <Ionicons
+                  name={unread > 0 ? 'notifications' : 'notifications-outline'}
+                  size={20}
+                  color={unread > 0 ? Palette.text : Palette.textSecondary}
+                />
+                {unread > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+                  </View>
+                ) : null}
+              </View>
+            )}
+          </Focusable>
+
+          <Focusable
+            onPress={() => setSheetOpen(true)}
+            showFocusRing={false}
+            accessibilityLabel="Account"
+            style={styles.side}
+          >
+            {({ focused }) => (
+              <View style={[styles.avatar, focused && styles.avatarFocused]}>
+                <Text style={styles.avatarText}>
+                  {(username || '?').slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </Focusable>
+        </View>
       </View>
 
       <AccountSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} />
@@ -93,6 +122,20 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   side: { alignSelf: 'center' },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  badge: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: Palette.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: Palette.text, fontSize: 10, fontWeight: '800' },
   iconButton: {
     width: 40,
     height: 40,

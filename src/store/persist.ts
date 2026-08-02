@@ -27,6 +27,8 @@ export const Keys = {
   downloads: 'xtream.downloads.v1',
   /** Recent crashes, redacted. Local only -- see store/crashLog.ts. */
   crashLog: 'xtream.crashLog.v1',
+  /** Announcements from the build server, plus which of them have been read. */
+  notifications: 'xtream.notifications.v1',
   /** Records that SecureStore failed and the password fell back to plain storage. */
   credentialStorageDegraded: 'xtream.credentialStorageDegraded',
 } as const;

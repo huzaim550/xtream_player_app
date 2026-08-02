@@ -17,6 +17,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~56.0.3",
+    "expo-application": "~56.0.3",
     "expo-build-properties": "~56.0.13",
     "expo-constants": "~56.0.14",
     "expo-dev-client": "~56.0.14",

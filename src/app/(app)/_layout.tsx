@@ -11,8 +11,10 @@ import { useEffect } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCatalogueSync } from '@/hooks/useCatalogueSync';
+import { useNotificationSync } from '@/hooks/useNotificationSync';
 import { useSession } from '@/store/session';
 import { AppHeader } from '@/ui/AppHeader';
+import { NotificationBanner } from '@/ui/NotificationBanner';
 import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
 import { IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
@@ -43,6 +45,7 @@ const NAV: readonly {
 
 export default function AppLayout() {
   useCatalogueSync();
+  useNotificationSync();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -128,6 +131,7 @@ export default function AppLayout() {
             Offline — showing your saved library.
           </Text>
         ) : null}
+        <NotificationBanner />
         <Slot />
       </View>
       {IS_TV ? null : nav}

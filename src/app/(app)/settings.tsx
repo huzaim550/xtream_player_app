@@ -7,11 +7,13 @@
  * is my password actually stored".
  */
 
+import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
+import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
 import { useCatalogue } from '@/store/catalogue';
 import { useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';
@@ -39,6 +41,9 @@ export default function SettingsScreen() {
 
   const [probe, setProbe] = useState<RawHealth | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
+  // Null unless the build server is offering a higher versionCode than this
+  // install. JS-only changes arrive over the air and never surface here.
+  const update = useAppUpdate();
 
   const runProbe = async () => {
     if (!session) return;
@@ -120,10 +125,37 @@ export default function SettingsScreen() {
         </Section>
       ) : null}
 
+      <Section title="App">
+        <Row
+          label="Version"
+          value={`${Application.nativeApplicationVersion ?? '—'} (${
+            Application.nativeBuildVersion ?? '—'
+          })`}
+        />
+        {update ? (
+          <Text style={styles.updateAvailable}>
+            Version {update.versionName ?? update.versionCode} is available
+            {formatUpdateSize(update.sizeBytes) ? ` · ${formatUpdateSize(update.sizeBytes)}` : ''}
+          </Text>
+        ) : (
+          <Text style={styles.hint}>
+            Content and layout changes install themselves in the background. This checks for the
+            larger updates that need a new install.
+          </Text>
+        )}
+      </Section>
+
       <FocusSection autoFocus style={styles.actions}>
+        {update ? (
+          <Action
+            label={`Install version ${update.versionName ?? update.versionCode}`}
+            preferFocus
+            onPress={() => openUpdateDownload(update)}
+          />
+        ) : null}
         <Action
           label={loading ? 'Refreshing…' : 'Refresh library'}
-          preferFocus
+          preferFocus={!update}
           onPress={() => session && refresh(session, { force: true })}
         />
         <Action label="Check server" onPress={runProbe} />
@@ -218,6 +250,9 @@ const styles = StyleSheet.create({
   rowLabel: { color: Palette.textMuted, fontSize: Type.body },
   rowValue: { color: Palette.text, fontSize: Type.body, flexShrink: 1 },
   warn: { color: Palette.danger, fontSize: Type.caption, marginTop: 10 },
+  // Informational, not an alarm -- hence accent blue rather than brand red,
+  // which this codebase reserves for "act on this".
+  updateAvailable: { color: Palette.accent, fontSize: Type.caption, marginTop: 10 },
   hint: {
     color: Palette.textMuted,
     fontSize: Type.caption,

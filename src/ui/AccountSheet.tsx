@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNotifications } from '@/store/notifications';
 import { useSession } from '@/store/session';
 import { Focusable } from './Focusable';
 import { FocusSection } from './FocusSection';
@@ -31,9 +32,12 @@ export function AccountSheet({ visible, onClose }: { visible: boolean; onClose: 
   const session = useSession((s) => s.session);
   const account = useSession((s) => s.account);
   const signOut = useSession((s) => s.signOut);
+  const unread = useNotifications((s) => s.unreadCount());
   const [confirming, setConfirming] = useState(false);
 
-  const go = (href: '/(app)/downloads' | '/(app)/settings' | '/(app)/privacy') => {
+  const go = (
+    href: '/(app)/downloads' | '/(app)/settings' | '/(app)/privacy' | '/(app)/notifications',
+  ) => {
     onClose();
     setConfirming(false);
     router.navigate(href);
@@ -96,9 +100,15 @@ export function AccountSheet({ visible, onClose }: { visible: boolean; onClose: 
           </View>
 
           <Row
+            icon="notifications-outline"
+            label="Notifications"
+            badge={unread}
+            preferFocus
+            onPress={() => go('/(app)/notifications')}
+          />
+          <Row
             icon="download-outline"
             label="Downloads"
-            preferFocus
             onPress={() => go('/(app)/downloads')}
           />
           <Row icon="settings-outline" label="Settings" onPress={() => go('/(app)/settings')} />
@@ -170,12 +180,15 @@ function Row({
   onPress,
   danger,
   preferFocus,
+  badge,
 }: {
   icon: IoniconName;
   label: string;
   onPress: () => void;
   danger?: boolean;
   preferFocus?: boolean;
+  /** Unread count. Rendered only when there is one, so a quiet row stays quiet. */
+  badge?: number;
 }) {
   return (
     <Focusable
@@ -192,6 +205,11 @@ function Row({
             color={danger ? Palette.danger : Palette.textSecondary}
           />
           <Text style={[styles.rowLabel, danger && styles.rowLabelDanger]}>{label}</Text>
+          {badge ? (
+            <View style={styles.rowBadge}>
+              <Text style={styles.rowBadgeText}>{badge > 9 ? '9+' : badge}</Text>
+            </View>
+          ) : null}
         </View>
       )}
     </Focusable>
@@ -240,6 +258,15 @@ const styles = StyleSheet.create({
   rowFocused: { backgroundColor: Palette.surfaceRaised, borderColor: Palette.focus },
   rowLabel: { color: Palette.text, fontSize: Type.body, fontWeight: '600' },
   rowLabelDanger: { color: Palette.danger },
+  rowBadge: {
+    minWidth: 20,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: Palette.brand,
+    alignItems: 'center',
+  },
+  rowBadgeText: { color: Palette.text, fontSize: Type.caption, fontWeight: '800' },
 
   confirm: {
     backgroundColor: Palette.surfaceRaised,
