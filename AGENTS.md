@@ -106,6 +106,37 @@ destination like the other four; Downloads is somewhere you visit occasionally.
 Six tabs on a phone makes every one of them too narrow to hit — do not add one
 without taking one away.
 
+## The player screen owns no window state
+
+`/player` is the only route that is landscape, and the only one with no system
+bars. **All of that is declared, never imperative.** Orientation lives in the
+route's `orientation: 'landscape'` option (against `'portrait'` on the root
+`screenOptions`); the navigation bar is `<NavigationBar hidden />` mounted in
+the playback tree.
+
+This is not style. Playback used to call
+`ScreenOrientation.lockAsync()` on mount and again on unmount, which drives
+`setRequestedOrientation()` on the Activity from JS on its own schedule — and
+it fired while react-native-screens was attaching and detaching the fragments
+either side of the transition. Backing out of a film landed on a blank native
+surface with the entire app gone from it: a grey screen, and then a white one,
+that survived three rounds of fixes aimed at the navigation. Anything
+lifecycle-tied (a route option, a mounted element) is owned by the same system
+that owns the transition and cannot race it. **Do not reintroduce an imperative
+window call here.**
+
+- `expo-screen-orientation` is still a dependency with no importer. That is
+  deliberate: it is a native module, so keeping it in the APK is what would let
+  a landscape regression be fixed over the air rather than with another build.
+- The route also sets `statusBarHidden` and `navigationBarHidden`.
+  `statusBarHidden` works; `navigationBarHidden` did **not** hide the
+  back/home/recents bar on a real device, which is why expo-navigation-bar was
+  added despite costing a rebuild. Both are left set — they are correct where
+  they are honoured.
+- The back arrow in `PlayerControls` is load-bearing, not decoration: with the
+  system bars gone it is the only always-available way out once the controls
+  are up. Do not demote it.
+
 ## Offline downloads
 
 - Files live in `Paths.document/downloads` (app-private, invisible to the

@@ -26,7 +26,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // every existing install's data.
   slug: 'xtream-player',
   scheme: 'xtreamplayer',
-  version: '1.1.0',
+  // 1.2.0: adds expo-navigation-bar, a native module. The bump is mandatory --
+  // runtimeVersion follows this field, so without it every existing 1.1.0
+  // install would happily download this bundle and crash the moment the player
+  // imports a module its APK does not contain.
+  version: '1.2.0',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   /**
@@ -63,7 +67,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * available" check has nothing to compare and never fires. This is the
      * integer Android orders installs by; `version` above is only the label.
      */
-    versionCode: 3,
+    versionCode: 4,
   },
   plugins: [
     'expo-router',

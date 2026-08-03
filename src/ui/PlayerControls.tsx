@@ -9,6 +9,13 @@
  * Everything here is driven off polled state rather than events, because
  * `player.currentTime` is the only source that stays correct while the user is
  * dragging the scrub handle.
+ *
+ * The back arrow top-left is load-bearing, not decoration. Playback hides the
+ * Android status and navigation bars (see the `player` screen options in
+ * src/app/_layout.tsx), so it is the only way out that is always one tap away
+ * once the controls are up -- which is why it is an `arrow-back` rather than
+ * the `chevron-down` it used to be, and why the hidden state below is a
+ * full-screen tap target that brings the chrome straight back.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +29,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Focusable } from './Focusable';
 import { FocusSection } from './FocusSection';
 import { ABSOLUTE_FILL, Layout, Palette, Type } from './platform';
@@ -53,6 +61,7 @@ export function PlayerControls({
   onBack,
   onOpenExternally,
 }: PlayerControlsProps) {
+  const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(true);
   // Bumped on every interaction. `visible` alone cannot restart the hide timer,
   // because pressing a button while the controls are already up does not change
@@ -81,8 +90,17 @@ export function PlayerControls({
   useEffect(() => {
     const t = setInterval(() => {
       if (scrubbing) return;
-      setPosition(player.currentTime ?? 0);
-      setDuration(player.duration ?? 0);
+      // A tick can land in the gap between the player being released and this
+      // interval being cleared, and touching a released expo-video object
+      // throws ERR_USING_RELEASED_SHARED_OBJECT. The player screen already
+      // unmounts this component before that happens; this is the backstop, so
+      // a stray tick can never be the thing that kills the app.
+      try {
+        setPosition(player.currentTime ?? 0);
+        setDuration(player.duration ?? 0);
+      } catch {
+        clearInterval(t);
+      }
     }, 250);
     return () => clearInterval(t);
   }, [player, scrubbing]);
@@ -167,8 +185,21 @@ export function PlayerControls({
         <View style={styles.dim} />
       </Focusable>
 
-      <FocusSection style={styles.top}>
-        <IconButton icon="chevron-down" label="Close" onPress={onBack} />
+      <FocusSection
+        style={[
+          styles.top,
+          // The status and navigation bars are hidden during playback, but a
+          // camera cutout is not -- and in landscape it sits on exactly the
+          // edge the back arrow lives on. paddingLeft/Right win over the
+          // stylesheet's paddingHorizontal.
+          {
+            paddingTop: styles.top.paddingTop + insets.top,
+            paddingLeft: styles.top.paddingHorizontal + insets.left,
+            paddingRight: styles.top.paddingHorizontal + insets.right,
+          },
+        ]}
+      >
+        <IconButton icon="arrow-back" label="Back" onPress={onBack} />
         <View style={styles.titles}>
           <Text style={styles.title} numberOfLines={1}>
             {title}
@@ -213,7 +244,16 @@ export function PlayerControls({
         />
       </FocusSection>
 
-      <View style={styles.bottom}>
+      <View
+        style={[
+          styles.bottom,
+          {
+            paddingBottom: styles.bottom.paddingBottom + insets.bottom,
+            paddingLeft: styles.bottom.paddingHorizontal + insets.left,
+            paddingRight: styles.bottom.paddingHorizontal + insets.right,
+          },
+        ]}
+      >
         <View style={styles.timeRow}>
           <Text style={styles.time}>{clock(position)}</Text>
           <Text style={styles.time}>-{clock(Math.max(0, duration - position))}</Text>

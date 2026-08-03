@@ -17,7 +17,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEventListener } from 'expo';
 import { useKeepAwake } from 'expo-keep-awake';
-import * as ScreenOrientation from 'expo-screen-orientation';
+import { NavigationBar } from 'expo-navigation-bar';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -34,7 +34,7 @@ import { useProgress, episodeKey, movieKey } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { PlayerControls } from '@/ui/PlayerControls';
-import { ABSOLUTE_FILL, IS_TV, Layout, Palette, Type } from '@/ui/platform';
+import { ABSOLUTE_FILL, Layout, Palette, Type } from '@/ui/platform';
 
 /** How long the "next episode" card counts down before it plays itself. */
 const AUTOPLAY_SECONDS = 10;
@@ -43,17 +43,28 @@ export default function PlayerScreen() {
   useKeepAwake();
   const router = useRouter();
 
-  // The rest of the app is portrait-locked (app.config.ts), so playback needs
-  // its own override -- landscape on the way in, back to portrait on the way
-  // out, regardless of how this screen is left (back, error, or unmount).
-  // A TV has no orientation to lock.
-  useEffect(() => {
-    if (IS_TV) return;
-    void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-    return () => {
-      void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    };
-  }, []);
+  /*
+   * Orientation is NOT set here.
+   *
+   * This screen used to call ScreenOrientation.lockAsync() on mount and again
+   * on unmount. That drives setRequestedOrientation() on the Activity from JS,
+   * on its own schedule -- and it fired while react-native-screens was busy
+   * attaching and detaching the fragments either side of the transition. The
+   * result was a blank native surface with the whole app gone from it: the
+   * grey/white screen on backing out of playback.
+   *
+   * It is now declared on the route instead (`orientation: 'landscape'` in
+   * src/app/_layout.tsx, against `'portrait'` on every other screen), so
+   * react-native-screens applies it as a window trait tied to the fragment
+   * lifecycle. The navigator owns the rotation and the transition, which means
+   * they can no longer race -- and there is no unlock left to strand if this
+   * screen dies badly.
+   *
+   * expo-screen-orientation stays in package.json even though nothing imports
+   * it any more. It is a native module: keeping it in the APK is what would let
+   * a landscape regression be fixed over the air, instead of costing another
+   * build and reinstall. Do not "tidy" it away without a device to test on.
+   */
 
   const session = useSession((s) => s.session);
   const record = useProgress((s) => s.record);
@@ -89,6 +100,10 @@ export default function PlayerScreen() {
   const [ready, setReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const hasSeeked = useRef(false);
+  /** Latched by leave(), so playback can only be exited once. */
+  const leaving = useRef(false);
+  /** The render-side half of that latch -- see leave(). */
+  const [left, setLeft] = useState(false);
   // Captured once: "Start over" must win over whatever is stored, and the
   // stored value would otherwise change under us as we write progress.
   const resumeTarget = useRef(params.restart === '1' ? 0 : resumeAtFor(entryKey));
@@ -113,8 +128,19 @@ export default function PlayerScreen() {
 
   const save = useCallback(() => {
     if (!player) return;
-    const position = player.currentTime ?? 0;
-    const duration = player.duration ?? 0;
+    // Reading position off a released player throws
+    // ERR_USING_RELEASED_SHARED_OBJECT. This runs from the unmount cleanup and
+    // from the AppState handler, both of which can fire *after* useVideoPlayer
+    // has released the native object -- so the read has to be allowed to fail.
+    // There is nothing to save at that point anyway.
+    let position: number;
+    let duration: number;
+    try {
+      position = player.currentTime ?? 0;
+      duration = player.duration ?? 0;
+    } catch {
+      return;
+    }
     if (position <= 0) return;
     record({
       key: entryKey,
@@ -143,18 +169,35 @@ export default function PlayerScreen() {
    * user came from. Returning `true` from the BackHandler keeps JS
    * authoritative, so there is exactly one code path that ends playback.
    *
-   * Portrait is requested here rather than only in the unmount cleanup so the
-   * rotation overlaps the transition -- the screen underneath then lays out
-   * once, in the orientation it will actually be seen in.
+   * Setting `left` is what actually fixed the blank screen on exit, and it is
+   * the load-bearing line here. Navigation is queued, so this screen renders at
+   * least once more after the press -- and react-native-screens freezes and
+   * thaws it around the transition, which forces yet more renders. By then
+   * useVideoPlayer may already have released the native player, and *any* touch
+   * of a released expo-video object throws ERR_USING_RELEASED_SHARED_OBJECT.
+   * That throw came from render, so React tore the whole tree down and left the
+   * bare window behind: the grey screen, and then the white one.
+   *
+   * Flipping `left` first drops VideoView and PlayerControls from the tree in
+   * the same commit, so nothing is left holding the player while it dies.
+   * PlayerControls is the dangerous one -- it reads `player.playing` on every
+   * single render and polls `currentTime` four times a second.
    */
   const leave = useCallback(() => {
+    // Latched, because navigation is queued: without this a quick double-tap
+    // dispatches a second GO_BACK that pops `(app)` off the root stack too.
+    if (leaving.current) return;
+    leaving.current = true;
+    setLeft(true);
     save();
     void flush();
-    // The player is not released until this screen unmounts, which is after the
-    // transition; without this the audio plays on over the page behind it.
-    player?.pause();
-    if (!IS_TV) {
-      void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    // Stops the audio playing on over the page behind during the transition.
+    // Guarded for the same reason as save() -- by the time a slow flush lands,
+    // the player may be gone.
+    try {
+      player?.pause();
+    } catch {
+      /* already released; it is not playing either way */
     }
     // A deep link or a notification can make the player the first route, in
     // which case there is nothing to go back to.
@@ -250,6 +293,13 @@ export default function PlayerScreen() {
     [save, flush],
   );
 
+  // On the way out: black, and nothing that touches the player. This must come
+  // before every other branch -- see leave() for why rendering VideoView or
+  // PlayerControls one frame too long takes the whole app down. It is also what
+  // the user should see anyway: the picture goes out, then the screen slides
+  // away.
+  if (left) return <View style={styles.root} />;
+
   if (!session && !params.localUri) {
     return (
       <View style={styles.center}>
@@ -303,6 +353,16 @@ export default function PlayerScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Netflix-style: no back/home/recents while a film is on. Declarative
+          rather than a pair of imperative calls, so the bar comes back purely
+          because this element unmounted -- there is no restore to forget and no
+          way to strand the device with no navigation bar if playback dies. The
+          system still reveals it on a swipe from the edge.
+
+          The route's own `navigationBarHidden` option was tried first, since it
+          needs no native module; it hid the status bar but not this. Rendered
+          only in the playback tree, so the error screen above keeps its bar. */}
+      <NavigationBar hidden />
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}
