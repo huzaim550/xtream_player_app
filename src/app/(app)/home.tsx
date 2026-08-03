@@ -17,7 +17,7 @@ import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useCatalogue } from '@/store/catalogue';
 import { useDownloads } from '@/store/downloads';
 import { useFavorites } from '@/store/favorites';
-import { useProgress, movieKey } from '@/store/progress';
+import { continueWatchingFrom, useProgress, movieKey } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Hero, type HeroItem } from '@/ui/Hero';
 import { MediaRow, type MediaRowItem } from '@/ui/MediaRow';
@@ -39,7 +39,6 @@ export default function HomeScreen() {
   const data = useCatalogue((s) => s.data);
   const loading = useCatalogue((s) => s.loading);
   const refresh = useCatalogue((s) => s.refresh);
-  const continueWatching = useProgress((s) => s.continueWatching);
   const entries = useProgress((s) => s.entries);
   const favMovies = useFavorites((s) => s.movies);
   const favSeries = useFavorites((s) => s.series);
@@ -47,8 +46,10 @@ export default function HomeScreen() {
   const downloads = useDownloads((s) => s.entries);
   const [refreshing, setRefreshing] = useState(false);
 
-  // `entries` is in the dep list so rows re-render as progress is written.
-  const resume = useMemo(() => continueWatching(), [continueWatching, entries]);
+  // Derived from `entries` itself, not from the store's continueWatching()
+  // getter -- see the note in src/store/downloads.ts. This is what re-renders
+  // the row as progress is written.
+  const resume = useMemo(() => continueWatchingFrom(entries), [entries]);
 
   const recent = useMemo(() => {
     // Movies only: the server fakes `last_modified` on series with the current

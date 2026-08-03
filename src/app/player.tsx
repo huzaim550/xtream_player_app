@@ -132,6 +132,36 @@ export default function PlayerScreen() {
     });
   }, [player, record, entryKey, kind, params]);
 
+  /**
+   * The one way out of this screen.
+   *
+   * Every exit goes through here -- the on-screen back control, the error
+   * screen, and the phone's own back button/gesture. That last one is why this
+   * exists at all: letting the default handler close the screen dismissed the
+   * native container without expo-router's state following it, and what was
+   * left behind was a blank grey frame instead of the movie or series page the
+   * user came from. Returning `true` from the BackHandler keeps JS
+   * authoritative, so there is exactly one code path that ends playback.
+   *
+   * Portrait is requested here rather than only in the unmount cleanup so the
+   * rotation overlaps the transition -- the screen underneath then lays out
+   * once, in the orientation it will actually be seen in.
+   */
+  const leave = useCallback(() => {
+    save();
+    void flush();
+    // The player is not released until this screen unmounts, which is after the
+    // transition; without this the audio plays on over the page behind it.
+    player?.pause();
+    if (!IS_TV) {
+      void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    }
+    // A deep link or a notification can make the player the first route, in
+    // which case there is nothing to go back to.
+    if (router.canGoBack()) router.back();
+    else router.replace('/(app)/home');
+  }, [save, flush, player, router]);
+
   const playNext = useCallback(() => {
     if (!params.nextId) return;
     save();
@@ -203,15 +233,14 @@ export default function PlayerScreen() {
     return () => sub.remove();
   }, [save, flush]);
 
-  // Back is how most playbacks end; flush before the screen goes away.
+  // Back is how most playbacks end. `true` means "handled" -- see leave().
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      save();
-      void flush();
-      return false;
+      leave();
+      return true;
     });
     return () => sub.remove();
-  }, [save, flush]);
+  }, [leave]);
 
   useEffect(
     () => () => {
@@ -260,7 +289,7 @@ export default function PlayerScreen() {
         <Focusable onPress={openExternally} style={styles.button} hasTVPreferredFocus>
           <Text style={styles.buttonText}>Open in another app</Text>
         </Focusable>
-        <Focusable onPress={() => router.back()} style={styles.buttonSecondary}>
+        <Focusable onPress={leave} style={styles.buttonSecondary}>
           <Text style={styles.buttonSecondaryText}>Go back</Text>
         </Focusable>
       </View>
@@ -293,7 +322,7 @@ export default function PlayerScreen() {
           player={player}
           title={params.title || 'Playing'}
           subtitle={episodeLabel}
-          onBack={() => router.back()}
+          onBack={leave}
           onOpenExternally={openExternally}
         />
       ) : null}

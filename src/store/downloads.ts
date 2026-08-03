@@ -72,6 +72,36 @@ interface DownloadsFile {
 /** Live transfer handles. Not state -- they do not survive a reload. */
 const active = new Map<string, StartedDownload>();
 
+/**
+ * Derivations, as pure functions of the entries map.
+ *
+ * A screen must derive from the `entries` it selected -- `useMemo(() =>
+ * sortedDownloads(entries), [entries])` -- and never wrap the equivalent store
+ * getter. `useMemo(() => list(), [list, entries])` looks identical and is not:
+ * React Compiler is on (app.config.ts `experiments.reactCompiler`), and it
+ * discards the written dependency array in favour of one inferred from what the
+ * callback actually closes over. A getter reads `get().entries` internally, so
+ * the callback closes over nothing reactive and the compiler emits
+ * `if ($[0] !== list)` -- computed once at mount, frozen for the life of the
+ * screen. That is what left deleted titles on screen and progress bars stuck at
+ * their first sample until the app was restarted.
+ */
+
+/** Newest first. */
+export function sortedDownloads(
+  entries: Record<string, DownloadEntry>,
+): DownloadEntry[] {
+  return Object.values(entries).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Total bytes on disk across completed downloads. */
+export function downloadedBytes(entries: Record<string, DownloadEntry>): number {
+  return Object.values(entries).reduce(
+    (sum, e) => sum + (e.fileUri ? downloadFileSize(e.fileUri) : 0),
+    0,
+  );
+}
+
 interface DownloadsState {
   entries: Record<string, DownloadEntry>;
   hydrated: boolean;
@@ -90,9 +120,9 @@ interface DownloadsState {
   remove: (key: string) => void;
   clearAll: () => Promise<void>;
   get: (key: string) => DownloadEntry | undefined;
-  /** Newest first. */
+  /** Newest first. Outside a component only -- see sortedDownloads(). */
   list: () => DownloadEntry[];
-  /** Total bytes on disk across completed downloads. */
+  /** Total bytes on disk. Outside a component only -- see downloadedBytes(). */
   bytesUsed: () => number;
 }
 
@@ -110,13 +140,24 @@ export const useDownloads = create<DownloadsState>((set, get) => {
     }, WRITE_DEBOUNCE_MS);
   };
 
-  const patch = (key: string, changes: Partial<DownloadEntry>) => {
+  /**
+   * `persist: false` for the progress ticks, which arrive several times a
+   * second. Persisting them would keep resetting the trailing debounce, so the
+   * file would not actually be written until the transfer ended -- and the
+   * bytes are worthless on disk anyway, because hydrate() resets everything
+   * that was mid-transfer to `failed` with bytesWritten 0.
+   */
+  const patch = (
+    key: string,
+    changes: Partial<DownloadEntry>,
+    { persist = true }: { persist?: boolean } = {},
+  ) => {
     set((s) => {
       const existing = s.entries[key];
       if (!existing) return s;
       return { entries: { ...s.entries, [key]: { ...existing, ...changes } } };
     });
-    scheduleWrite();
+    if (persist) scheduleWrite();
   };
 
   /**
@@ -134,9 +175,6 @@ export const useDownloads = create<DownloadsState>((set, get) => {
 
     patch(next.key, { status: 'downloading', error: undefined });
 
-    // Progress fires several times a second. Only the in-memory store is
-    // updated that often; scheduleWrite coalesces the disk write, exactly as
-    // playback progress does.
     const handle = startDownload({
       session,
       key: next.key,
@@ -144,7 +182,7 @@ export const useDownloads = create<DownloadsState>((set, get) => {
       id: next.id,
       ext: next.ext,
       onProgress: (bytesWritten, bytesTotal) =>
-        patch(next.key, { bytesWritten, bytesTotal }),
+        patch(next.key, { bytesWritten, bytesTotal }, { persist: false }),
     });
     active.set(next.key, handle);
 
@@ -249,11 +287,9 @@ export const useDownloads = create<DownloadsState>((set, get) => {
       if (!blocked) pump(session);
     },
 
-    cancel: (key) => {
-      active.get(key)?.cancel();
-      active.delete(key);
-      get().remove(key);
-    },
+    /** Same teardown as remove(); kept as its own name for the call sites that
+     *  mean "stop this transfer" rather than "delete this title". */
+    cancel: (key) => get().remove(key),
 
     retry: (session, key) => {
       const e = get().entries[key];
@@ -263,6 +299,17 @@ export const useDownloads = create<DownloadsState>((set, get) => {
     },
 
     remove: (key) => {
+      // Stop the transfer before touching the disk. Deleting the file out from
+      // under a running task only means the task writes it again, leaving an
+      // orphan no record points at. The rejection this raises lands in the
+      // catch above, which pumps the queue -- and patches a key that is gone by
+      // then, so it cannot resurrect the row.
+      const handle = active.get(key);
+      if (handle) {
+        active.delete(key);
+        handle.cancel();
+      }
+
       const e = get().entries[key];
       if (e) deleteDownloadFile(e.key, e.ext);
       set((s) => {
@@ -283,12 +330,8 @@ export const useDownloads = create<DownloadsState>((set, get) => {
 
     get: (key) => get().entries[key],
 
-    list: () => Object.values(get().entries).sort((a, b) => b.createdAt - a.createdAt),
+    list: () => sortedDownloads(get().entries),
 
-    bytesUsed: () =>
-      Object.values(get().entries).reduce(
-        (sum, e) => sum + (e.fileUri ? downloadFileSize(e.fileUri) : 0),
-        0,
-      ),
+    bytesUsed: () => downloadedBytes(get().entries),
   };
 });

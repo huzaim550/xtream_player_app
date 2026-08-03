@@ -48,10 +48,12 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="(app)" />
-        <Stack.Screen
-          name="player"
-          options={{ presentation: 'fullScreenModal', animation: 'fade' }}
-        />
+        {/* A plain screen, not a modal. `player` is already a sibling of
+            `(app)`, so it covers the tabs either way -- and on Android a
+            fullScreenModal is a native container whose own dismissal does not
+            go through expo-router, which is half of why backing out of
+            playback used to land on a blank grey frame. */}
+        <Stack.Screen name="player" options={{ animation: 'fade' }} />
       </Stack>
     </SafeAreaProvider>
   );

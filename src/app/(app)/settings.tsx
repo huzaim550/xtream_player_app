@@ -9,13 +9,13 @@
 
 import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
 import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
 import { useCatalogue } from '@/store/catalogue';
-import { useDownloads } from '@/store/downloads';
+import { downloadedBytes, useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
@@ -36,8 +36,11 @@ export default function SettingsScreen() {
   const loading = useCatalogue((s) => s.loading);
   const clearProgress = useProgress((s) => s.clearAll);
   const downloadEntries = useDownloads((s) => s.entries);
-  const bytesUsed = useDownloads((s) => s.bytesUsed);
   const clearDownloads = useDownloads((s) => s.clearAll);
+  // Derived from `downloadEntries`, not the store's bytesUsed() getter, so
+  // "Clear downloads" drops it to zero without leaving the screen. See the note
+  // in src/store/downloads.ts.
+  const used = useMemo(() => downloadedBytes(downloadEntries), [downloadEntries]);
 
   const [probe, setProbe] = useState<RawHealth | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
@@ -101,7 +104,7 @@ export default function SettingsScreen() {
 
       <Section title="Downloads">
         <Row label="Saved offline" value={`${Object.keys(downloadEntries).length} titles`} />
-        <Row label="Storage used" value={formatBytes(bytesUsed())} />
+        <Row label="Storage used" value={formatBytes(used)} />
         <Text style={styles.hint}>
           Downloads are stored inside this app only. They are not visible to your
           gallery or other apps, and are removed if you uninstall Manzar.And can be only viewed in the app.

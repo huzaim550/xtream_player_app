@@ -64,6 +64,45 @@ function isFinished(positionSec: number, durationSec: number): boolean {
   return durationSec - positionSec <= FINISHED_TAIL_SECONDS;
 }
 
+/**
+ * Derivations, as pure functions of the entries map.
+ *
+ * Screens derive from the `entries` they selected, never by wrapping the
+ * equivalent store getter in a useMemo -- see the note in store/downloads.ts
+ * for why React Compiler freezes that shape at its first value.
+ */
+
+/** Most recent first, one card per series, unfinished only. */
+export function continueWatchingFrom(
+  entries: Record<string, ProgressEntry>,
+): ProgressEntry[] {
+  const all = Object.values(entries)
+    .filter((e) => !e.finished && e.positionSec >= MIN_RESUME_SECONDS)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const seen = new Set<number>();
+  const out: ProgressEntry[] = [];
+  for (const e of all) {
+    if (e.kind === 'episode' && e.seriesId !== undefined) {
+      if (seen.has(e.seriesId)) continue;
+      seen.add(e.seriesId);
+    }
+    out.push(e);
+    if (out.length >= MAX_CONTINUE_ROW) break;
+  }
+  return out;
+}
+
+/** Drives the "Continue S2E4" call to action on a series screen. */
+export function lastEpisodeIn(
+  entries: Record<string, ProgressEntry>,
+  seriesId: number,
+): ProgressEntry | undefined {
+  return Object.values(entries)
+    .filter((e) => e.kind === 'episode' && e.seriesId === seriesId)
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+}
+
 interface ProgressState {
   entries: Record<string, ProgressEntry>;
   hydrated: boolean;
@@ -79,7 +118,9 @@ interface ProgressState {
   resumeAt: (key: string) => number;
   remove: (key: string) => void;
   clearAll: () => Promise<void>;
+  /** Outside a component only -- see continueWatchingFrom(). */
   continueWatching: () => ProgressEntry[];
+  /** Outside a component only -- see lastEpisodeIn(). */
   lastEpisodeFor: (seriesId: number) => ProgressEntry | undefined;
 }
 
@@ -159,29 +200,8 @@ export const useProgress = create<ProgressState>((set, get) => {
       await writeJson(Keys.progress, { version: 1, entries: {} });
     },
 
-    /** Most recent first, one card per series, unfinished only. */
-    continueWatching: () => {
-      const all = Object.values(get().entries)
-        .filter((e) => !e.finished && e.positionSec >= MIN_RESUME_SECONDS)
-        .sort((a, b) => b.updatedAt - a.updatedAt);
+    continueWatching: () => continueWatchingFrom(get().entries),
 
-      const seen = new Set<number>();
-      const out: ProgressEntry[] = [];
-      for (const e of all) {
-        if (e.kind === 'episode' && e.seriesId !== undefined) {
-          if (seen.has(e.seriesId)) continue;
-          seen.add(e.seriesId);
-        }
-        out.push(e);
-        if (out.length >= MAX_CONTINUE_ROW) break;
-      }
-      return out;
-    },
-
-    /** Drives the "Continue S2E4" call to action on a series screen. */
-    lastEpisodeFor: (seriesId) =>
-      Object.values(get().entries)
-        .filter((e) => e.kind === 'episode' && e.seriesId === seriesId)
-        .sort((a, b) => b.updatedAt - a.updatedAt)[0],
+    lastEpisodeFor: (seriesId) => lastEpisodeIn(get().entries, seriesId),
   };
 });

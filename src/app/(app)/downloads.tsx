@@ -13,7 +13,12 @@ import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '@/api/download';
-import { useDownloads, type DownloadEntry } from '@/store/downloads';
+import {
+  downloadedBytes,
+  sortedDownloads,
+  useDownloads,
+  type DownloadEntry,
+} from '@/store/downloads';
 import { useSession } from '@/store/session';
 import { EmptyState } from '@/ui/EmptyState';
 import { Focusable } from '@/ui/Focusable';
@@ -24,15 +29,16 @@ export default function DownloadsScreen() {
   const router = useRouter();
   const session = useSession((s) => s.session);
   const entries = useDownloads((s) => s.entries);
-  const list = useDownloads((s) => s.list);
   const cancel = useDownloads((s) => s.cancel);
   const retry = useDownloads((s) => s.retry);
   const remove = useDownloads((s) => s.remove);
-  const bytesUsed = useDownloads((s) => s.bytesUsed);
 
-  // `entries` in the dep list is what re-renders the rows as bytes tick up.
-  const rows = useMemo(() => list(), [list, entries]);
-  const used = useMemo(() => bytesUsed(), [bytesUsed, entries]);
+  // Derived from `entries` directly, not from the store's list()/bytesUsed()
+  // getters: those close over nothing reactive, and React Compiler would
+  // memoise the result forever. See the note in src/store/downloads.ts. This is
+  // what makes bytes tick up live and a deleted row leave the screen at once.
+  const rows = useMemo(() => sortedDownloads(entries), [entries]);
+  const used = useMemo(() => downloadedBytes(entries), [entries]);
 
   if (rows.length === 0) {
     return (

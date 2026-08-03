@@ -76,6 +76,27 @@ as a path segment — `src/store/__tests__/crashLog.test.ts` guards that.
 - `src/content/**` — long-form copy (the privacy policy) as data, so screens
   stay pure presentation.
 
+**React Compiler is on** (`app.config.ts` `experiments.reactCompiler`), and it
+**discards the dependency array you write**, inferring one from what the
+callback actually closes over. So a screen must derive from the state it
+selected, never by wrapping a store getter:
+
+```ts
+const rows = useMemo(() => list(), [list, entries]);        // FROZEN AT MOUNT
+const rows = useMemo(() => sortedDownloads(entries), [entries]);  // correct
+```
+
+`list()` reads `get().entries` internally, so the callback closes over nothing
+reactive and the compiler emits `if ($[0] !== list)` — computed once, never
+again. That is what left deleted downloads on screen and progress bars stuck at
+their first sample until the app was restarted. Every getter with a screen-side
+caller therefore also exists as a pure function of the map — `sortedDownloads`,
+`downloadedBytes`, `continueWatchingFrom`, `lastEpisodeIn` — and the store
+methods delegate to those. Selectors are *not* affected
+(`useProgress((s) => s.resumeAt(k))` is fine); zustand re-runs those on every
+store change. To check what the compiler did to a file:
+`npx babel --plugins babel-plugin-react-compiler <file>`.
+
 Navigation is **five tabs** — Home, Movies, Series, Search, My List. Downloads,
 Notifications, Settings, the privacy policy and sign-out live behind the header
 avatar (`AccountSheet`), and `AppHeader`'s `SUBPAGE_ROUTE` is what gives those

@@ -20,7 +20,7 @@ import { getSeriesDetail } from '@/api/endpoints';
 import { useCatalogue } from '@/store/catalogue';
 import { useDownloads } from '@/store/downloads';
 import { useFavorites } from '@/store/favorites';
-import { useProgress, episodeKey } from '@/store/progress';
+import { lastEpisodeIn, useProgress, episodeKey } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
@@ -39,7 +39,6 @@ export default function SeriesDetailScreen() {
   const data = useCatalogue((s) => s.data);
   const cached = useCatalogue((s) => s.seriesById(seriesId));
   const entries = useProgress((s) => s.entries);
-  const lastEpisodeFor = useProgress((s) => s.lastEpisodeFor);
   const isFavorite = useFavorites((s) => s.isFavorite('series', seriesId));
   const toggleFavorite = useFavorites((s) => s.toggle);
   const downloads = useDownloads((s) => s.entries);
@@ -61,10 +60,9 @@ export default function SeriesDetailScreen() {
     };
   }, [session, seriesId, cached]);
 
-  const resumeEntry = useMemo(
-    () => lastEpisodeFor(seriesId),
-    [lastEpisodeFor, seriesId, entries],
-  );
+  // Derived from `entries` itself rather than the store's lastEpisodeFor()
+  // getter -- see the note in src/store/downloads.ts.
+  const resumeEntry = useMemo(() => lastEpisodeIn(entries, seriesId), [entries, seriesId]);
 
   /** Flat, in broadcast order -- the sequence "next episode" walks. */
   const ordered = useMemo(

@@ -8,7 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useDownloads } from '../downloads';
+import { downloadedBytes, sortedDownloads, useDownloads } from '../downloads';
 import { Keys } from '../persist';
 import type { DownloadEntry } from '../downloads';
 import type { Session } from '@/types/domain';
@@ -228,6 +228,23 @@ describe('cancel and remove', () => {
     expect(useDownloads.getState().entries['movie:1']).toBeUndefined();
   });
 
+  it('remove stops an in-flight transfer before deleting its file', () => {
+    const t = deferredTransfer();
+    mockStart.mockReturnValue(t.handle);
+    useDownloads.getState().enqueue(session, movie());
+
+    // The delete button on the Downloads screen calls remove(), not cancel().
+    // Leaving the task running would let it write the file back after we had
+    // deleted it, orphaning bytes no record points at.
+    useDownloads.getState().remove('movie:1');
+
+    expect(t.cancel).toHaveBeenCalled();
+    expect(t.cancel.mock.invocationCallOrder[0]).toBeLessThan(
+      (deleteDownloadFile as jest.Mock).mock.invocationCallOrder[0],
+    );
+    expect(useDownloads.getState().entries['movie:1']).toBeUndefined();
+  });
+
   it('starts the next queued item after a cancel', async () => {
     const first = deferredTransfer();
     const second = deferredTransfer();
@@ -241,6 +258,47 @@ describe('cancel and remove', () => {
     await flush();
 
     expect(useDownloads.getState().entries['movie:2'].status).toBe('downloading');
+  });
+});
+
+/**
+ * These exist as pure functions so screens can derive from the `entries` they
+ * selected. Calling the store getters from inside a useMemo instead looks
+ * equivalent but is not -- React Compiler infers its own dependencies and
+ * freezes such a value at its first result. Keeping the logic addressable this
+ * way is what makes the Downloads screen update live.
+ */
+describe('derivations', () => {
+  const entry = (key: string, over: Partial<DownloadEntry> = {}): DownloadEntry => ({
+    ...movie(key),
+    fileUri: null,
+    bytesWritten: 0,
+    bytesTotal: -1,
+    status: 'queued',
+    createdAt: 1,
+    ...over,
+  });
+
+  it('sortedDownloads puts the newest first', () => {
+    const entries = {
+      'movie:1': entry('movie:1', { createdAt: 100 }),
+      'movie:2': entry('movie:2', { createdAt: 300 }),
+      'movie:3': entry('movie:3', { createdAt: 200 }),
+    };
+    expect(sortedDownloads(entries).map((e) => e.key)).toEqual([
+      'movie:2',
+      'movie:3',
+      'movie:1',
+    ]);
+  });
+
+  it('downloadBytes counts only records with a file on disk', () => {
+    const entries = {
+      'movie:1': entry('movie:1', { status: 'done', fileUri: 'file:///a.mkv' }),
+      'movie:2': entry('movie:2'), // still queued, nothing written yet
+    };
+    // downloadFileSize is mocked at 1 GB per file.
+    expect(downloadedBytes(entries)).toBe(1024 ** 3);
   });
 });
 
