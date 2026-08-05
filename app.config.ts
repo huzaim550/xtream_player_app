@@ -30,7 +30,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // runtimeVersion follows this field, so without it every existing 1.1.0
   // install would happily download this bundle and crash the moment the player
   // imports a module its APK does not contain.
-  version: '1.2.1',
+  // Stays 1.2.0 until a native module actually changes. Every install in the
+  // wild runs the 1.2.0 APK, and the update manifest resolves a bundle by
+  // *exact* runtimeVersion -- so bumping this without shipping a matching APK
+  // does not "release a new version", it silently cuts every phone off from
+  // every future OTA.
+  version: '1.2.0',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   /**
