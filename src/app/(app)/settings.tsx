@@ -15,6 +15,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { privacyOptionsRequired, showPrivacyOptions } from '@/ads';
 import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
+import { SELF_UPDATES } from '@/distribution';
 import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
 import { adsOn, useAds } from '@/store/ads';
 import { useCatalogue } from '@/store/catalogue';
@@ -71,7 +72,7 @@ export default function SettingsScreen() {
   }, []);
   // Null unless the build server is offering a higher versionCode than this
   // install. JS-only changes arrive over the air and never surface here.
-  const update = useAppUpdate();
+  const update = useAppUpdate(SELF_UPDATES);
 
   const runProbe = async () => {
     if (!session) return;
@@ -132,7 +133,7 @@ export default function SettingsScreen() {
         <Row label="Storage used" value={formatBytes(used)} />
         <Text style={styles.hint}>
           Downloads are stored inside this app only. They are not visible to your
-          gallery or other apps, and are removed if you uninstall Manzar.And can be only viewed in the app.
+          gallery or other apps, and are removed if you uninstall Manzar, and can only be viewed inside it.
         </Text>
       </Section>
 
@@ -189,21 +190,26 @@ export default function SettingsScreen() {
         {!Updates.isEmbeddedLaunch && Updates.createdAt ? (
           <Row label="Bundle built" value={Updates.createdAt.toLocaleString()} />
         ) : null}
-        {update ? (
+        {/* The whole update block belongs to the sideloaded build. A Play build
+            must not offer to fetch and install an APK -- that is a Device and
+            Network Abuse violation -- and has nothing to say here anyway,
+            because Play does the updating. IS_PLAY is a build-time literal, so
+            this is dropped from the store bundle rather than merely hidden. */}
+        {SELF_UPDATES && update ? (
           <Text style={styles.updateAvailable}>
             Version {update.versionName ?? update.versionCode} is available
             {formatUpdateSize(update.sizeBytes) ? ` · ${formatUpdateSize(update.sizeBytes)}` : ''}
           </Text>
-        ) : (
+        ) : SELF_UPDATES ? (
           <Text style={styles.hint}>
             Content and layout changes install themselves in the background. This checks for the
             larger updates that need a new install.
           </Text>
-        )}
+        ) : null}
       </Section>
 
       <FocusSection autoFocus style={styles.actions}>
-        {update ? (
+        {SELF_UPDATES && update ? (
           <Action
             label={`Install version ${update.versionName ?? update.versionCode}`}
             preferFocus

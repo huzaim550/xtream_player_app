@@ -9,6 +9,7 @@
 import * as Updates from 'expo-updates';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SELF_UPDATES } from '@/distribution';
 import { useCrashLog, type CrashRecord } from '@/store/crashLog';
 import { EmptyState } from '@/ui/EmptyState';
 import { Focusable } from '@/ui/Focusable';
@@ -78,11 +79,16 @@ export default function DiagnosticsScreen() {
       </Section>
 
       <FocusSection autoFocus style={styles.actions}>
-        <Action
-          label={checking ? 'Checking…' : 'Check for updates'}
-          preferFocus
-          onPress={() => void checkForUpdate()}
-        />
+        {/* Absent from the Play build: `updates.enabled` is false there (see
+            app.config.ts), so this could only ever report that updates are
+            switched off. Play does the updating. */}
+        {SELF_UPDATES ? (
+          <Action
+            label={checking ? 'Checking…' : 'Check for updates'}
+            preferFocus
+            onPress={() => void checkForUpdate()}
+          />
+        ) : null}
         {records.length > 0 ? (
           <Action label="Clear crash log" danger onPress={() => void clear()} />
         ) : null}

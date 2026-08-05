@@ -11,11 +11,43 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  */
 
 /**
- * Cleartext HTTP is needed only to reach a local dev server (http://10.0.2.2:8000).
- * The live server is HTTPS behind a Cloudflare tunnel, so release builds must
- * not carry this.
+ * Which shop this binary is destined for.
+ *
+ * `sideload` (the default) is the build the family installs by hand from the
+ * Axe server: it carries the in-app APK updater and self-hosted OTA updates.
+ * `play` is the Play Store build, which must carry neither -- downloading and
+ * installing an APK is a Device and Network Abuse violation, and a store binary
+ * whose behaviour can be changed from a home server is a review risk for no
+ * benefit, since Play does the updating.
+ *
+ * EXPO_PUBLIC_ because the value has to reach two places: this file, which
+ * shapes the native project, and the JS, where it decides whether the updater
+ * is in the bundle at all. Anything with that prefix is inlined at build time.
+ *
+ * Defaulting to `sideload` means an ordinary `axe build` keeps doing what it
+ * has always done, and only a deliberate store build opts in.
  */
-const allowCleartext = process.env.NODE_ENV !== 'production';
+const DISTRIBUTION = process.env.EXPO_PUBLIC_DISTRIBUTION ?? 'sideload';
+if (DISTRIBUTION !== 'play' && DISTRIBUTION !== 'sideload') {
+  // Fail the build rather than quietly producing a sideload binary that someone
+  // is about to upload to the Play Store.
+  throw new Error(
+    `EXPO_PUBLIC_DISTRIBUTION must be "play" or "sideload", got "${DISTRIBUTION}".`,
+  );
+}
+const IS_PLAY = DISTRIBUTION === 'play';
+
+/**
+ * Cleartext HTTP exists only to reach a local dev server (http://10.0.2.2:8000).
+ * The live server is HTTPS behind a Cloudflare tunnel, so no shipped build
+ * should carry it.
+ *
+ * This used to key off `NODE_ENV !== 'production'`, which was wrong in the one
+ * place it mattered: nothing sets NODE_ENV on the Axe build server, so every
+ * build it produced -- including a store one -- shipped cleartext enabled. An
+ * explicit opt-in cannot be got wrong by omission.
+ */
+const allowCleartext = !IS_PLAY && process.env.EXPO_PUBLIC_ALLOW_CLEARTEXT === '1';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -46,20 +78,26 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
    * hypothetical here -- adding expo-file-system did exactly that.
    */
   runtimeVersion: { policy: 'appVersion' },
-  updates: {
-    // Self-hosted update server (the mybuild box at home), published over
-    // HTTPS through a Cloudflare tunnel so installs reach it from anywhere,
-    // not just the home LAN. Not EAS Update — the previous endpoint was
-    // https://u.expo.dev/0f30553e-a11e-404c-9de0-31edfb91167f.
-    // HTTPS also matters because usesCleartextTraffic is false in release
-    // builds (see allowCleartext above), which would block a plain-http URL.
-    url: 'https://updates.manzaronline.site/api/updates/xtream-player-app/manifest',
-    requestHeaders: { 'expo-channel-name': 'production' },
-    // Never block the splash on a network round trip. The server is behind a
-    // Cloudflare tunnel and a cold call can take ~10s; the app launches on the
-    // bundle it already has and picks up the new one next launch.
-    fallbackToCacheTimeout: 0,
-  },
+  updates: IS_PLAY
+    ? // Play does the updating. Leaving a self-hosted manifest live in a store
+      // binary would mean the reviewed app could be changed from a machine in
+      // somebody's house -- permitted for JS, but a risk with no upside here,
+      // and it would make the store build depend on a home tunnel staying up.
+      { enabled: false }
+    : {
+        // Self-hosted update server (the mybuild box at home), published over
+        // HTTPS through a Cloudflare tunnel so installs reach it from anywhere,
+        // not just the home LAN. Not EAS Update — the previous endpoint was
+        // https://u.expo.dev/0f30553e-a11e-404c-9de0-31edfb91167f.
+        // HTTPS also matters because usesCleartextTraffic is false in release
+        // builds (see allowCleartext above), which would block a plain-http URL.
+        url: 'https://updates.manzaronline.site/api/updates/xtream-player-app/manifest',
+        requestHeaders: { 'expo-channel-name': 'production' },
+        // Never block the splash on a network round trip. The server is behind a
+        // Cloudflare tunnel and a cold call can take ~10s; the app launches on
+        // the bundle it already has and picks up the new one next launch.
+        fallbackToCacheTimeout: 0,
+      },
   android: {
     ...config.android,
     package: 'site.manzaronline.xtream',
@@ -69,7 +107,25 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * available" check has nothing to compare and never fires. This is the
      * integer Android orders installs by; `version` above is only the label.
      */
-    versionCode: 6,
+    versionCode: 7,
+    /**
+     * Permissions the app has never used, removed rather than explained.
+     *
+     * Expo's template starts every project with these, and nothing in src/
+     * touches any of them: downloads go to Paths.document, which is app-private
+     * and needs no storage permission, and nothing draws over other apps.
+     * SYSTEM_ALERT_WINDOW in particular is one Play asks about, and "we do not
+     * use it" is a much better answer than a justification.
+     *
+     * INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK and AD_ID stay: they come from
+     * expo-video, expo-updates and play-services-ads, are actually used, and
+     * AD_ID is declared on the Data Safety form.
+     */
+    blockedPermissions: [
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+    ],
   },
   plugins: [
     'expo-router',
