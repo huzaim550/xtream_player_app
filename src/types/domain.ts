@@ -98,6 +98,28 @@ export interface AccountInfo {
   activeConnections: number;
 }
 
+/** The browsing screens that can carry a banner. Mirrors AD_SURFACES on the server. */
+export type AdSurface = 'home' | 'movies' | 'series' | 'search' | 'my_list';
+
+/**
+ * Ad settings for the signed-in account. Only exists when the server said this
+ * user gets ads at all -- see store/ads.ts.
+ */
+export interface AdsConfig {
+  bannerSurfaces: AdSurface[];
+  /** 0 or 1: an interstitial after Play, before the picture starts. */
+  preRoll: number;
+  /** Breaks during a title, spread evenly. 1 = halfway. 0 = none. */
+  midRollBreaks: number;
+  /** Never interrupt a title shorter than this. */
+  minTitleSeconds: number;
+  minSecondsBetween: number;
+  /** Interstitial while browsing, every N detail screens. 0 = off. */
+  everyNOpens: number;
+  /** Floor between any two interstitials of any kind. */
+  interstitialMinSeconds: number;
+}
+
 export interface Catalogue {
   movies: Movie[];
   series: Series[];

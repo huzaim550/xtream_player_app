@@ -10,9 +10,12 @@ import { Redirect, Slot, usePathname, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAdsInit } from '@/hooks/useAdsInit';
 import { useCatalogueSync } from '@/hooks/useCatalogueSync';
 import { useNotificationSync } from '@/hooks/useNotificationSync';
 import { useSession } from '@/store/session';
+import type { AdSurface } from '@/types/domain';
+import { AdBanner } from '@/ui/AdBanner';
 import { AppHeader } from '@/ui/AppHeader';
 import { NotificationBanner } from '@/ui/NotificationBanner';
 import { Focusable } from '@/ui/Focusable';
@@ -43,9 +46,27 @@ const NAV: readonly {
   { href: '/(app)/my-list', label: 'My List', icon: 'bookmark-outline', iconActive: 'bookmark' },
 ] as const;
 
+/**
+ * Which of the five browsing surfaces this route is, for ad purposes.
+ *
+ * Null for everything else -- the pushed subpages (a title, Settings, the
+ * privacy policy, Downloads) carry no banner. Settings and the policy in
+ * particular must not: an ad beside the document explaining the app's data
+ * handling is indefensible, whatever the server says.
+ */
+function adSurfaceFor(pathname: string): AdSurface | null {
+  if (pathname.endsWith('/home')) return 'home';
+  if (pathname.endsWith('/movies')) return 'movies';
+  if (pathname.endsWith('/series')) return 'series';
+  if (pathname.endsWith('/search')) return 'search';
+  if (pathname.endsWith('/my-list')) return 'my_list';
+  return null;
+}
+
 export default function AppLayout() {
   useCatalogueSync();
   useNotificationSync();
+  useAdsInit();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -133,6 +154,10 @@ export default function AppLayout() {
         ) : null}
         <NotificationBanner />
         <Slot />
+        {/* Below the screen, above the tab bar. Mounted here rather than in
+            each screen so a tab change does not cost an ad request, and so
+            there is exactly one place that decides where ads appear. */}
+        <AdBanner surface={adSurfaceFor(pathname)} />
       </View>
       {IS_TV ? null : nav}
     </View>

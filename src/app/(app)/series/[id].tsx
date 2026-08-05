@@ -21,6 +21,7 @@ import { useCatalogue } from '@/store/catalogue';
 import { useDownloads } from '@/store/downloads';
 import { useFavorites } from '@/store/favorites';
 import { lastEpisodeIn, useProgress, episodeKey } from '@/store/progress';
+import { useTitleOpenAd } from '@/hooks/useTitleOpenAd';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
@@ -32,6 +33,7 @@ import type { Episode, SeriesDetail } from '@/types/domain';
 const RELATED_COUNT = 20;
 
 export default function SeriesDetailScreen() {
+  useTitleOpenAd();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const seriesId = Number(id);

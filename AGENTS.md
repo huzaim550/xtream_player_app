@@ -203,6 +203,36 @@ nothing until it is next opened; that is the deal, and the dashboard says so.
 - `src/content/privacy.ts` names this call. If the app ever sends anything about
   the user to that host, that file has to change with it.
 
+## Advertising
+
+AdMob, and **which users see it is the Xtream server's decision, not the app's**.
+`ads_for_user()` there resolves the master switch, the per-user flag and the
+default, and the handshake carries the answer as `manzar_ads` — a key that is
+**omitted entirely** unless ads are on for that account, so every other client
+of that endpoint sees exactly what it saw before. `src/store/ads.ts` is the only
+place that becomes app state; absent means off, which is also what an old server
+and a failed handshake mean.
+
+- Placement counts are server-side so they can be tuned, or every ad killed,
+  from one checkbox with no release. A dashboard control that the app ignores is
+  worse than no control — if you remove a placement here, remove its knob there.
+- `src/ads/**` is the only code that imports `react-native-google-mobile-ads`,
+  and `initAds()` does not run until the store says this account has ads. That
+  deferral is what makes the privacy policy's "nothing is sent to Google unless
+  your server enabled them" true, so the two change together.
+- The consent form is a modal over whatever is on screen, which is why
+  `useAdsInit` is mounted in `(app)` and never in the player.
+- The player's ad breaks read the **`timeUpdate` payload**, never the player
+  object, so the one thing running every second cannot be what touches a
+  released player. `adShowing` drops `PlayerControls` for the same reason `left`
+  does, and `VideoView` stays mounted throughout.
+- **Returning from a full-screen ad re-attaches the video surface**, which is
+  the failure the expo-video patch exists for — so the `useExoShutter` flip runs
+  again on every `adGeneration` bump. It used to be a one-shot at mount; an ad
+  is the thing that made that insufficient.
+- Ads never run over a downloaded file (choosing to download is choosing to
+  watch offline) or on TV (no dismiss control a remote can reach).
+
 ## Server contract hazards (all verified against the server source)
 
 - **Auth failure is HTTP 200** with `user_info.auth === 0` — never a 401.

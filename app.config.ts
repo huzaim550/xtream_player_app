@@ -26,16 +26,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // every existing install's data.
   slug: 'xtream-player',
   scheme: 'xtreamplayer',
-  // 1.2.0: adds expo-navigation-bar, a native module. The bump is mandatory --
-  // runtimeVersion follows this field, so without it every existing 1.1.0
-  // install would happily download this bundle and crash the moment the player
-  // imports a module its APK does not contain.
-  // Stays 1.2.0 until a native module actually changes. Every install in the
-  // wild runs the 1.2.0 APK, and the update manifest resolves a bundle by
-  // *exact* runtimeVersion -- so bumping this without shipping a matching APK
-  // does not "release a new version", it silently cuts every phone off from
-  // every future OTA.
-  version: '1.2.0',
+  // 1.3.0: adds react-native-google-mobile-ads, a native module. The bump is
+  // mandatory -- runtimeVersion follows this field, so without it every 1.2.0
+  // install would download a bundle that imports a module its APK does not
+  // contain and crash at launch. The cost is the other half of the same rule:
+  // 1.2.0 phones stop receiving updates until someone installs the new APK by
+  // hand, so never bump this without shipping one.
+  version: '1.3.0',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   /**
@@ -72,7 +69,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * available" check has nothing to compare and never fires. This is the
      * integer Android orders installs by; `version` above is only the label.
      */
-    versionCode: 5,
+    versionCode: 6,
   },
   plugins: [
     'expo-router',
@@ -88,6 +85,27 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-build-properties', { android: { usesCleartextTraffic: allowCleartext } }],
     'expo-video',
     'expo-secure-store',
+    /**
+     * AdMob. The app id is written into AndroidManifest.xml as a meta-data
+     * entry, so it is native: changing it costs a rebuild, and the SDK crashes
+     * at initialisation if it is missing.
+     *
+     * Hardcoded rather than read from .env on purpose. It is not a secret -- it
+     * ships in the manifest of every APK -- and .env is gitignored, so sourcing
+     * it from there would mean a build from a clean checkout produced an app
+     * that crashed the first time an ad loaded.
+     *
+     * Note the tilde: this is the *app* id. The ad *unit* ids (with a slash)
+     * are plain strings in src/ads/index.ts and can be changed over the air.
+     */
+    [
+      'react-native-google-mobile-ads',
+      {
+        androidAppId: 'ca-app-pub-2594910378903221~6280597182',
+        optimizeInitialization: true,
+        optimizeAdLoading: true,
+      },
+    ],
   ],
   // reactCompiler comes from the template's known-good configuration; keep it.
   experiments: { typedRoutes: true, reactCompiler: true },

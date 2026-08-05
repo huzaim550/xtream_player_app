@@ -36,9 +36,30 @@ export interface RawServerInfo {
   time_now: string;
 }
 
+/**
+ * Ad settings, for this account, as decided by the server.
+ *
+ * Optional and Manzar-specific: the server omits the whole key unless ads are
+ * switched on for this user, so its absence is the normal case and means "no
+ * ads". Everything here is already resolved server-side -- there is no
+ * enabled/disabled flag to interpret, because a payload only exists when the
+ * answer was yes.
+ */
+export interface RawAdsConfig {
+  banner_surfaces?: unknown;
+  player_pre_roll?: unknown;
+  player_mid_roll_breaks?: unknown;
+  player_min_title_seconds?: unknown;
+  player_min_seconds_between?: unknown;
+  interstitial_every_n_opens?: unknown;
+  interstitial_min_seconds?: unknown;
+}
+
 export interface RawHandshake {
   user_info: RawUserInfo;
   server_info?: RawServerInfo;
+  /** Absent for every account without ads, and for every older server. */
+  manzar_ads?: RawAdsConfig;
 }
 
 /** The auth-failure envelope. Delivered with HTTP 200 — never 401. */

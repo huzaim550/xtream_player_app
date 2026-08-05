@@ -115,7 +115,7 @@ on the server. Without it `npm ci` fails on peer ranges.
 Both live in `app.config.ts`. They do different jobs and are bumped at
 different times.
 
-### `version` (currently `1.2.0`) — the OTA compatibility gate
+### `version` (currently `1.3.0`) — the OTA compatibility gate
 
 `runtimeVersion` follows it (`policy: 'appVersion'`). An OTA update is only
 ever served to an app reporting the **exact same** runtimeVersion.
@@ -130,7 +130,7 @@ exists because `expo-navigation-bar` was added.
 Two runtimeVersions live side by side happily. A 1.1.0 install keeps getting
 1.1.0 updates while a 1.2.0 install gets 1.2.0 ones.
 
-### `android.versionCode` (currently `4`) — the install ordering integer
+### `android.versionCode` (currently `6`) — the install ordering integer
 
 This is the number Android itself uses to decide what is newer, and the number
 `src/hooks/useAppUpdate.ts` compares against

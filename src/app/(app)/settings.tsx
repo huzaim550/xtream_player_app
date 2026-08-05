@@ -10,11 +10,13 @@
 import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { privacyOptionsRequired, showPrivacyOptions } from '@/ads';
 import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
 import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
+import { adsOn, useAds } from '@/store/ads';
 import { useCatalogue } from '@/store/catalogue';
 import { downloadedBytes, useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';
@@ -45,6 +47,19 @@ export default function SettingsScreen() {
 
   const [probe, setProbe] = useState<RawHealth | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
+  const adsEnabled = useAds((s) => adsOn(s.config));
+  // Asked once per visit rather than stored: Google's answer depends on where
+  // the device is, and it is only meaningful after the consent flow has run.
+  const [privacyOptions, setPrivacyOptions] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void privacyOptionsRequired().then((need) => {
+      if (live) setPrivacyOptions(need);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   // Null unless the build server is offering a higher versionCode than this
   // install. JS-only changes arrive over the air and never surface here.
   const update = useAppUpdate();
@@ -130,6 +145,16 @@ export default function SettingsScreen() {
       ) : null}
 
       <Section title="App">
+        {/* Stated plainly rather than left to be discovered. Ads are a property
+            of the account, set by whoever runs the server, and "why does my
+            player have adverts now" is otherwise a question only they can
+            answer. */}
+        <Row label="Ads on this account" value={adsEnabled ? 'On' : 'Off'} />
+        {privacyOptions ? (
+          // Google requires this to be reachable wherever the consent form
+          // offers a choice, so it is rendered only when the SDK says so.
+          <Action label="Ad privacy choices" onPress={() => void showPrivacyOptions()} />
+        ) : null}
         <Row
           label="Version"
           value={`${Application.nativeApplicationVersion ?? '—'} (${

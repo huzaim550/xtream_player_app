@@ -31,3 +31,34 @@ jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
   deleteItemAsync: jest.fn(async () => {}),
 }));
+
+/**
+ * AdMob. src/store/session.ts reaches src/ads/interstitial.ts to clear a primed
+ * ad on sign-out, which pulls the SDK in transitively -- and the SDK's native
+ * module throws at import time outside an app. The stub only needs to be
+ * inert: nothing under test shows an ad, it just must not explode on the way
+ * past.
+ */
+jest.mock('react-native-google-mobile-ads', () => ({
+  __esModule: true,
+  default: () => ({
+    initialize: jest.fn(async () => []),
+    setRequestConfiguration: jest.fn(async () => {}),
+  }),
+  AdsConsent: {
+    requestInfoUpdate: jest.fn(async () => {}),
+    loadAndShowConsentFormIfRequired: jest.fn(async () => {}),
+    getConsentInfo: jest.fn(async () => ({ privacyOptionsRequirementStatus: 'NOT_REQUIRED' })),
+    showPrivacyOptionsForm: jest.fn(async () => {}),
+  },
+  AdEventType: { LOADED: 'loaded', ERROR: 'error', CLOSED: 'closed' },
+  BannerAd: () => null,
+  BannerAdSize: { ANCHORED_ADAPTIVE_BANNER: 'anchored' },
+  InterstitialAd: { createForAdRequest: jest.fn(() => ({
+    addAdEventListener: jest.fn(() => jest.fn()),
+    load: jest.fn(),
+    show: jest.fn(),
+  })) },
+  MaxAdContentRating: { PG: 'PG' },
+  TestIds: { ADAPTIVE_BANNER: 'test-banner', INTERSTITIAL: 'test-interstitial' },
+}));

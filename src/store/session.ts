@@ -8,8 +8,10 @@
  */
 
 import { create } from 'zustand';
+import { reset as resetInterstitial } from '@/ads/interstitial';
 import { handshake, normalizeBaseUrl } from '@/api/client';
 import { AuthError } from '@/api/errors';
+import { useAds } from './ads';
 import {
   Keys,
   clearPassword,
@@ -102,14 +104,16 @@ export const useSession = create<SessionState>((set, get) => ({
 
     try {
       const raw = await handshake(session);
+      const account = toAccount(raw);
+      useAds.getState().applyHandshake(raw);
       set({
         session,
-        account: toAccount(raw),
+        account,
         boot: 'signed-in',
         offline: false,
         lastRevalidatedAt: Date.now(),
       });
-      await writeJson(Keys.account, toAccount(raw));
+      await writeJson(Keys.account, account);
     } catch (err) {
       if (err instanceof AuthError) {
         // Expired, revoked, or throttled. Keep the stored password either way:
@@ -149,6 +153,7 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const raw = await handshake(session);
       const account = toAccount(raw);
+      useAds.getState().applyHandshake(raw);
       const { secure } = await setPassword(password);
       await Promise.all([
         writeString(Keys.serverUrl, baseUrl),
@@ -185,6 +190,10 @@ export const useSession = create<SessionState>((set, get) => ({
     // favourites -- those are keyed by content-derived ids, so the same user
     // signing back in should find their history intact.
     await remove(Keys.username, Keys.account);
+    // Ads are a property of the account, not the device: the next person to
+    // sign in on this phone must not inherit them.
+    useAds.getState().reset();
+    resetInterstitial();
     set({
       session: null,
       account: null,
@@ -204,6 +213,7 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const raw = await handshake(session);
       const account = toAccount(raw);
+      useAds.getState().applyHandshake(raw);
       set({ account, offline: false, lastRevalidatedAt: Date.now() });
       await writeJson(Keys.account, account);
     } catch (err) {

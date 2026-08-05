@@ -18,6 +18,7 @@ import { NotFoundError } from '@/api/errors';
 import { useCatalogue } from '@/store/catalogue';
 import { useDownloads } from '@/store/downloads';
 import { useFavorites } from '@/store/favorites';
+import { useTitleOpenAd } from '@/hooks/useTitleOpenAd';
 import { useProgress, movieKey } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
@@ -38,6 +39,7 @@ function formatTime(sec: number): string {
 }
 
 export default function MovieDetailScreen() {
+  useTitleOpenAd();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const movieId = Number(id);

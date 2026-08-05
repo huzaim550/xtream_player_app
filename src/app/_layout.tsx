@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installCrashHandler, useCrashLog } from '@/store/crashLog';
+import { useAds } from '@/store/ads';
 import { useSession } from '@/store/session';
 import { BrandSplash } from '@/ui/BrandSplash';
 // Aliased: expo-router gives the bare name `ErrorBoundary` a special meaning
@@ -22,6 +23,10 @@ export default function RootLayout() {
   const boot = useSession((s) => s.boot);
   const restore = useSession((s) => s.restore);
   const hydrateCrashLog = useCrashLog((s) => s.hydrate);
+  // Read the last-known ad settings off disk before the first handshake lands,
+  // so a cold start into /player (a deep link, or the app being reopened on a
+  // film) knows whether it may break for an ad.
+  const hydrateAds = useAds((s) => s.hydrate);
   const [minElapsed, setMinElapsed] = useState(false);
 
   useEffect(() => {
@@ -29,7 +34,8 @@ export default function RootLayout() {
     // Read past crashes off disk so Settings can show the one that happened
     // *before* this launch -- the only one anybody ever wants to see.
     void hydrateCrashLog();
-  }, [restore, hydrateCrashLog]);
+    void hydrateAds();
+  }, [restore, hydrateCrashLog, hydrateAds]);
 
   useEffect(() => {
     const t = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);

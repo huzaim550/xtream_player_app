@@ -29,12 +29,14 @@ import {
   View,
 } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
+import { show as showInterstitial } from '@/ads/interstitial';
 import { episodeStreamUrl, movieStreamUrl } from '@/api/streamUrl';
+import { midRollPoints, preRollOn, useAds } from '@/store/ads';
 import { useProgress, episodeKey, movieKey } from '@/store/progress';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { PlayerControls } from '@/ui/PlayerControls';
-import { ABSOLUTE_FILL, Layout, Palette, Type } from '@/ui/platform';
+import { ABSOLUTE_FILL, IS_TV, Layout, Palette, Type } from '@/ui/platform';
 
 /** How long the "next episode" card counts down before it plays itself. */
 const AUTOPLAY_SECONDS = 10;
@@ -114,14 +116,36 @@ export default function PlayerScreen() {
   const [firstFrame, setFirstFrame] = useState(false);
   /**
    * Forces the video surface visible. See the comment on <VideoView> below --
-   * this flips true -> false one tick after mount on purpose, and the flip is
-   * the entire point.
+   * this flips true -> false shortly after mount on purpose, and the flip, not
+   * the value, is what does the work.
+   *
+   * `adGeneration` is bumped every time a full-screen ad closes. Returning from
+   * one destroys and recreates the SurfaceView, which puts expo-video back in
+   * the state the flip exists to escape -- so the flip has to happen again. It
+   * used to run once at mount, which was enough until something could re-attach
+   * the surface mid-film.
    */
   const [shutter, setShutter] = useState(true);
+  const [adGeneration, setAdGeneration] = useState(0);
   useEffect(() => {
+    setShutter(true);
     const t = setTimeout(() => setShutter(false), 500);
     return () => clearTimeout(t);
-  }, []);
+  }, [adGeneration]);
+  /** True while a full-screen ad is up. Drops the controls, like `left`. */
+  const [adShowing, setAdShowing] = useState(false);
+  const adsConfig = useAds((s) => s.config);
+  /**
+   * Ads are skipped entirely for a downloaded file: choosing to download
+   * something is choosing to watch it without the network, and an ad request
+   * that cannot succeed would pause the film for nothing. Also skipped on TV,
+   * where a full-screen ad has no dismiss control a remote can reach.
+   */
+  const adsAllowed = !!adsConfig && !params.localUri && !IS_TV;
+  /** Break times in seconds, computed once from the duration. */
+  const pendingBreaks = useRef<number[]>([]);
+  const breaksPlanned = useRef(false);
+
   const [countdown, setCountdown] = useState<number | null>(null);
   const hasSeeked = useRef(false);
   /** Latched by leave(), so playback can only be exited once. */
@@ -271,6 +295,46 @@ export default function PlayerScreen() {
     }
   }, [player]);
 
+  /**
+   * Run a full-screen ad, with playback paused around it.
+   *
+   * The ordering here is the whole thing. Every step exists because of a way
+   * this screen is already known to break:
+   *
+   *  - the leave() latch is checked first, and again after: an ad must never
+   *    appear once the user has pressed back, and the app can be backgrounded
+   *    and this screen destroyed while Google's Activity has focus
+   *  - `adShowing` drops PlayerControls from the tree exactly as `left` does.
+   *    Those controls read player.playing every render and poll currentTime
+   *    four times a second, which is the code most likely to touch a released
+   *    player while the surface underneath is being torn down and rebuilt
+   *  - VideoView stays mounted. Unmounting it *is* the surface-attach path the
+   *    expo-video patch exists to survive; there is no reason to walk it twice
+   *  - playback resumes whatever the ad did. show() resolves rather than
+   *    rejects, and resolves on a timeout if the ad never opened, because a
+   *    promise that never settles here is a film that never restarts
+   */
+  const runAd = useCallback(async () => {
+    if (leaving.current || !adsConfig) return;
+    try {
+      player.pause();
+    } catch {
+      return; // already released; there is nothing left to interrupt
+    }
+    setAdShowing(true);
+    await showInterstitial(adsConfig.minSecondsBetween);
+    if (leaving.current) return;
+    setAdShowing(false);
+    // Re-run the surface flip: coming back from the ad Activity recreated the
+    // SurfaceView, so expo-video is back to hiding it.
+    setAdGeneration((n) => n + 1);
+    try {
+      player.play();
+    } catch {
+      /* the screen is going away; nothing to resume */
+    }
+  }, [adsConfig, player]);
+
   // Seek only once the source is loaded -- setting currentTime earlier is a
   // no-op. sourceLoad can fire again (e.g. after a track change), so the ref
   // stops a mid-film re-seek.
@@ -281,11 +345,40 @@ export default function PlayerScreen() {
     if (!hasSeeked.current && target > 5 && target < duration - 30) {
       player.currentTime = target;
     }
+    // Work out where the ad breaks fall, once, off the duration this event
+    // carries. A ref rather than state: nothing renders from it.
+    const firstLoad = !breaksPlanned.current;
+    if (firstLoad) {
+      breaksPlanned.current = true;
+      pendingBreaks.current = adsAllowed
+        ? midRollPoints(adsConfig, duration, target)
+        : [];
+    }
     hasSeeked.current = true;
+
+    // The pre-roll replaces this play() rather than preceding it: runAd()
+    // pauses and resumes around the ad, so starting playback first would leak a
+    // second or two of film before the advert.
+    if (firstLoad && adsAllowed && preRollOn(adsConfig)) {
+      void runAd();
+      return;
+    }
     player.play();
   });
 
-  useEventListener(player, 'timeUpdate', () => save());
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    save();
+    // The break check reads the event payload, never the player object, so the
+    // one thing running every second on this screen cannot be the thing that
+    // touches a released player.
+    if (!adsAllowed || adShowing || leaving.current || left) return;
+    const next = pendingBreaks.current[0];
+    if (next === undefined || currentTime < next) return;
+    // Consumed before the await, so the tick a second from now cannot fire the
+    // same break twice.
+    pendingBreaks.current = pendingBreaks.current.slice(1);
+    void runAd();
+  });
 
   useEventListener(player, 'statusChange', ({ status, error: err }) => {
     if (status === 'error') {
@@ -465,7 +558,11 @@ export default function PlayerScreen() {
         </View>
       ) : null}
 
-      {ready && !Layout.useNativeControls && countdown === null ? (
+      {/* `adShowing` drops these for the same reason `left` does: they read
+          player.playing on every render and poll currentTime four times a
+          second, and an ad is exactly when the surface underneath is being torn
+          down and rebuilt. See runAd(). */}
+      {ready && !adShowing && !Layout.useNativeControls && countdown === null ? (
         <PlayerControls
           player={player}
           title={params.title || 'Playing'}

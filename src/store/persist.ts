@@ -29,6 +29,8 @@ export const Keys = {
   crashLog: 'xtream.crashLog.v1',
   /** Announcements from the build server, plus which of them have been read. */
   notifications: 'xtream.notifications.v1',
+  /** Ad settings, as last served by the Xtream server. See store/ads.ts. */
+  ads: 'xtream.ads.v1',
   /** Records that SecureStore failed and the password fell back to plain storage. */
   credentialStorageDegraded: 'xtream.credentialStorageDegraded',
 } as const;
