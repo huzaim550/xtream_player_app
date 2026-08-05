@@ -64,7 +64,8 @@ interface SessionState {
   restore: () => Promise<void>;
   signIn: (baseUrl: string, username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  revalidate: () => Promise<void>;
+  /** `force` bypasses the hourly rate limit. See the implementation. */
+  revalidate: (force?: boolean) => Promise<void>;
   clearNotice: () => void;
   lockoutRemainingMs: () => number;
 }
@@ -205,11 +206,22 @@ export const useSession = create<SessionState>((set, get) => ({
     });
   },
 
-  /** Cheap periodic refresh, mainly so Settings can show live connection use. */
-  revalidate: async () => {
+  /**
+   * Cheap refresh of everything the handshake carries: connection use, expiry,
+   * status, and whether this account has ads.
+   *
+   * Rate-limited to hourly on the foreground path, because that fires every
+   * time the app is brought forward. `force` skips the limit, for the one case
+   * where a stale answer is actively misleading: the Settings screen, which
+   * displays these values and is where somebody goes to check them. Without it,
+   * a change made on the server can take an hour to show up -- and on Android
+   * that is a real hour, because swiping the app away rarely kills the process,
+   * so the cold-start path does not run either.
+   */
+  revalidate: async (force = false) => {
     const { session, lastRevalidatedAt } = get();
     if (!session) return;
-    if (Date.now() - lastRevalidatedAt < REVALIDATE_INTERVAL_MS) return;
+    if (!force && Date.now() - lastRevalidatedAt < REVALIDATE_INTERVAL_MS) return;
     try {
       const raw = await handshake(session);
       const account = toAccount(raw);

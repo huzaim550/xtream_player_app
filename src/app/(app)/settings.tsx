@@ -48,6 +48,15 @@ export default function SettingsScreen() {
   const [probe, setProbe] = useState<RawHealth | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
   const adsEnabled = useAds((s) => adsOn(s.config));
+  const revalidate = useSession((s) => s.revalidate);
+  // Everything this screen shows about the account -- connections in use,
+  // expiry, status, whether ads are on -- comes from the handshake, which is
+  // otherwise refreshed at most hourly. This is the screen people open *to
+  // check* those values, so it asks again rather than showing an hour-old
+  // answer with no way to tell it is old.
+  useEffect(() => {
+    void revalidate(true);
+  }, [revalidate]);
   // Asked once per visit rather than stored: Google's answer depends on where
   // the device is, and it is only meaningful after the consent flow has run.
   const [privacyOptions, setPrivacyOptions] = useState(false);
