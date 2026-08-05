@@ -30,7 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // runtimeVersion follows this field, so without it every existing 1.1.0
   // install would happily download this bundle and crash the moment the player
   // imports a module its APK does not contain.
-  version: '1.2.0',
+  version: '1.2.1',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   /**
@@ -67,7 +67,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * available" check has nothing to compare and never fires. This is the
      * integer Android orders installs by; `version` above is only the label.
      */
-    versionCode: 4,
+    versionCode: 5,
   },
   plugins: [
     'expo-router',

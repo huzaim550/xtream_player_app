@@ -59,6 +59,34 @@ sometimes what you want (see *Build now, release later*).
 pass it: it is what makes the new APK able to receive future OTA updates, and
 it costs nothing.
 
+### What `--type apk --ota --release` actually does to phones
+
+It produces two artifacts and flips two switches: the APK goes on the APK
+channel, and a JS bundle **tagged with your source tree's `runtimeVersion`**
+goes on the OTA channel. Who receives what is decided entirely by whether you
+bumped `version`:
+
+| Bumped `version`? | Phones on the old version | Phones on the new APK |
+|---|---|---|
+| **Yes** (1.2.0 → 1.3.0) | get **nothing** over the air — they must install the APK by hand | receive this bundle, and every later `--type update` |
+| **No** (still 1.2.0) | pick the JS up **over the air**, two launches, no download | — |
+
+The manifest endpoint looks a released bundle up by `(slug, channel,
+runtimeVersion)`, so a 1.2.0 phone can never be served a 1.3.0 bundle. That is
+the safety gate working.
+
+**The trap is the second row.** If you are building an APK *because* you added
+a native module, and you leave `version` alone, that OTA bundle lands on phones
+whose APK does not contain the module — and they crash at launch. The `--ota`
+flag turns "some people haven't updated yet" into an outage. Bump `version`.
+
+Releasing a 1.3.0 OTA does **not** retire the 1.2.0 one: the demotion is scoped
+to the same `runtimeVersion`, so phones still on the old binary keep the last
+bundle that works for them while they take their time upgrading.
+
+And if you did not bump `version` because the change was pure JS — you did not
+need an APK build at all. `--type update` does the same job in 20 seconds.
+
 ---
 
 ## What actually gets uploaded
