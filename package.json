@@ -11,7 +11,9 @@
     "prebuild:phone": "expo prebuild --clean -p android",
     "android:phone": "npm run prebuild:phone && expo run:android",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "postinstall": "patch-package",
+    "patch:expo-video": "python3 scripts/patch-expo-video.py && npx patch-package expo-video"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -57,6 +59,7 @@
     "@types/react": "~19.2.2",
     "jest": "~29.7.0",
     "jest-expo": "~56.0.5",
+    "patch-package": "^8.0.1",
     "typescript": "~6.0.3"
   },
   "private": true

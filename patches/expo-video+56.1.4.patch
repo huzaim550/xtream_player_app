@@ -1,0 +1,34 @@
+diff --git a/node_modules/expo-video/android/src/main/java/expo/modules/video/player/FirstFrameEventGenerator.kt b/node_modules/expo-video/android/src/main/java/expo/modules/video/player/FirstFrameEventGenerator.kt
+index 0b73db8..e413ed8 100644
+--- a/node_modules/expo-video/android/src/main/java/expo/modules/video/player/FirstFrameEventGenerator.kt
++++ b/node_modules/expo-video/android/src/main/java/expo/modules/video/player/FirstFrameEventGenerator.kt
+@@ -104,13 +104,21 @@ internal class FirstFrameEventGenerator(
+       return false
+     }
+ 
+-    val surfaceAspectRatio = surfaceWidth.toFloat() / surfaceHeight
+-    val trackAspectRatio = sourceWidth.toFloat() / sourceHeight * sourcePixelWidthHeightRatio
+-
+-    val videoSizeIsUnknown = sourceWidth == 0 || sourceHeight == 0
+-    val hasFillContentFit = currentPlayerView.playerView.resizeMode == ContentFit.FILL.toResizeMode()
+-    val hasCorrectRatio = abs(trackAspectRatio - surfaceAspectRatio) < epsilon
+-
+-    return (hasCorrectRatio || hasFillContentFit || videoSizeIsUnknown)
++    // PATCHED (see patches/README.md).
++    //
++    // Upstream also required the surface's aspect ratio to match the track's:
++    //
++    //   val hasCorrectRatio = abs(trackAspectRatio - surfaceAspectRatio) < epsilon
++    //   return (hasCorrectRatio || hasFillContentFit || videoSizeIsUnknown)
++    //
++    // A full-screen surface showing a letterboxed 2.35:1 film never satisfies
++    // that -- 2340x1080 is 2.167, the track is 2.354 -- so onRenderedFirstFrame
++    // was withheld forever, and with it the alpha=1 that makes the video
++    // surface visible at all. The film then plays to the end into an invisible
++    // surface: audio, no picture, no error. The zero-size check above is the
++    // part of this function that is actually about layout being ready, and it
++    // is kept; `contentFit` legitimately leaves the surface a different shape
++    // from the video, so shape can never be the readiness signal.
++    return true
+   }
+ }
