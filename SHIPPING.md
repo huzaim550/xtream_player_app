@@ -311,9 +311,24 @@ Then, every time:
 
 The generated `AndroidManifest.xml` keeps `SYSTEM_ALERT_WINDOW` and the two
 external-storage permissions with `tools:node="remove"` on them — that is
-`blockedPermissions` working. They are gone from the *merged* manifest, which is
-the one that matters; check `app/build/intermediates/merged_manifest/…` rather
-than the source if you are verifying.
+`blockedPermissions` working, not failing. They are gone from the **merged**
+manifest, which is the one that ships; verify there
+(`app/build/intermediates/merged_manifest/release/…`), never in the source.
+
+The merged permission list for a Play build, verified, is exactly:
+
+```
+ACCESS_ADSERVICES_AD_ID / _ATTRIBUTION / _TOPICS   play-services-ads
+ACCESS_NETWORK_STATE, INTERNET, WAKE_LOCK          expo-video, updates, ads
+FOREGROUND_SERVICE                                 expo-video
+USE_BIOMETRIC, USE_FINGERPRINT                     expo-secure-store
+VIBRATE                                            react-native
+com.google.android.gms.permission.AD_ID            play-services-ads
+com.google.android.finsky.…INSTALL_REFERRER…       play-services-ads
+```
+
+`AD_ID` is the one the Data Safety form has to account for. Nothing there is a
+restricted permission, so none of it needs a declaration form.
 
 ---
 
