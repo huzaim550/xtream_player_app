@@ -98,6 +98,18 @@ export default function PlayerScreen() {
   const entryKey = kind === 'movie' ? movieKey(params.id) : episodeKey(params.id);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  /**
+   * What media3 did with the video track, shown in the controls.
+   *
+   * Temporary, for the black-picture-with-audio bug. It splits the two halves
+   * of that problem, which look identical from the sofa: if this reports a size
+   * and `ok`, the frames are being decoded and the picture is being lost on the
+   * way to the screen (a compositing bug in this app). If it reports `no video
+   * track` or `unsupported`, the decoder never ran and the file or the device
+   * is the problem -- and expo-video does not always raise an error for that,
+   * which is why it can look like a black screen rather than a failure.
+   */
+  const [probe, setProbe] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const hasSeeked = useRef(false);
   /** Latched by leave(), so playback can only be exited once. */
@@ -227,11 +239,32 @@ export default function PlayerScreen() {
     });
   }, [params, router, save, flush]);
 
+  /** Reads the selected video track. Guarded: the player may be released. */
+  const sampleProbe = useCallback(() => {
+    try {
+      const track = player.videoTrack;
+      if (!track) {
+        const available = player.availableVideoTracks?.length ?? 0;
+        setProbe(available === 0 ? 'probe: no video track' : `probe: ${available} tracks, none selected`);
+        return;
+      }
+      const { width, height } = track.size ?? { width: 0, height: 0 };
+      setProbe(
+        `probe: ${width}×${height} · ${track.mimeType ?? 'unknown'} · ${
+          track.isSupported ? 'ok' : 'UNSUPPORTED'
+        }`,
+      );
+    } catch {
+      /* released mid-sample; the controls are going away anyway */
+    }
+  }, [player]);
+
   // Seek only once the source is loaded -- setting currentTime earlier is a
   // no-op. sourceLoad can fire again (e.g. after a track change), so the ref
   // stops a mid-film re-seek.
   useEventListener(player, 'sourceLoad', ({ duration }) => {
     setReady(true);
+    sampleProbe();
     const target = resumeTarget.current;
     if (!hasSeeked.current && target > 5 && target < duration - 30) {
       player.currentTime = target;
@@ -246,6 +279,8 @@ export default function PlayerScreen() {
     if (status === 'error') {
       setError(err?.message ?? 'This file could not be played.');
     }
+    // Tracks are not always resolved by the time sourceLoad fires.
+    if (status === 'readyToPlay') sampleProbe();
   });
 
   // End of an episode with another one waiting: offer it, and take the offer if
@@ -398,6 +433,7 @@ export default function PlayerScreen() {
           player={player}
           title={params.title || 'Playing'}
           subtitle={episodeLabel}
+          probe={probe}
           onBack={leave}
           onOpenExternally={openExternally}
         />

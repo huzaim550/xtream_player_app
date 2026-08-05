@@ -50,6 +50,8 @@ export interface PlayerControlsProps {
   player: VideoPlayer;
   title: string;
   subtitle?: string;
+  /** What media3 did with the video track. See the probe in src/app/player.tsx. */
+  probe?: string | null;
   onBack: () => void;
   onOpenExternally: () => void;
 }
@@ -58,6 +60,7 @@ export function PlayerControls({
   player,
   title,
   subtitle,
+  probe,
   onBack,
   onOpenExternally,
 }: PlayerControlsProps) {
@@ -207,6 +210,11 @@ export function PlayerControls({
           {subtitle ? (
             <Text style={styles.subtitle} numberOfLines={1}>
               {subtitle}
+            </Text>
+          ) : null}
+          {probe ? (
+            <Text style={styles.probe} numberOfLines={1}>
+              {probe}
             </Text>
           ) : null}
         </View>
@@ -439,6 +447,9 @@ const styles = StyleSheet.create({
   titles: { flex: 1 },
   title: { color: Palette.text, fontSize: Type.body, fontWeight: '700' },
   subtitle: { color: Palette.textSecondary, fontSize: Type.caption, marginTop: 2 },
+  // Diagnostic, not chrome: deliberately quiet, and only on screen while the
+  // controls are. Remove it once the black-picture bug is closed.
+  probe: { color: Palette.textMuted, fontSize: 10, marginTop: 2 },
 
   center: {
     flexDirection: 'row',

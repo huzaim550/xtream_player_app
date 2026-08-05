@@ -9,6 +9,7 @@
 
 import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatBytes } from '@/api/download';
@@ -135,6 +136,25 @@ export default function SettingsScreen() {
             Application.nativeBuildVersion ?? '—'
           })`}
         />
+        {/* Which JS bundle is actually running.
+            Without this there is no way to tell "the fix did not work" from
+            "the fix never arrived" -- the version above comes from the APK and
+            does not move when an update lands. `Bundle` reads `embedded` on a
+            fresh install and the update's short id once one has been applied;
+            an update downloads on one launch and applies on the next, so a
+            bundle that still says `embedded` means the app has been opened
+            once, not that the update failed. */}
+        <Row
+          label="Bundle"
+          value={
+            Updates.isEmbeddedLaunch
+              ? 'embedded (as shipped in the APK)'
+              : (Updates.updateId?.slice(0, 8) ?? 'unknown')
+          }
+        />
+        {!Updates.isEmbeddedLaunch && Updates.createdAt ? (
+          <Row label="Bundle built" value={Updates.createdAt.toLocaleString()} />
+        ) : null}
         {update ? (
           <Text style={styles.updateAvailable}>
             Version {update.versionName ?? update.versionCode} is available
