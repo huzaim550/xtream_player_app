@@ -232,6 +232,15 @@ and a failed handshake mean.
   is the thing that made that insufficient.
 - Ads never run over a downloaded file (choosing to download is choosing to
   watch offline) or on TV (no dismiss control a remote can reach).
+- **`react-native-google-mobile-ads` is pinned to 16.0.0**, and moving it needs
+  a check first. 16.4.0 pins `play-services-ads:25.4.0`, whose classes carry
+  Kotlin **2.3.0** metadata; this project compiles with Kotlin 2.1.0, and an
+  older compiler cannot read newer metadata, so every Gradle build dies with
+  `Module was compiled with an incompatible version of Kotlin`. 16.0.0 pins
+  24.6.0, which predates that. Before upgrading, check
+  `npm view react-native-google-mobile-ads@<v> sdkVersions.android.googleMobileAds`
+  — anything on the 25.x line needs `kotlinVersion` raised in
+  expo-build-properties at the same time, which recompiles every native module.
 
 ## Server contract hazards (all verified against the server source)
 
