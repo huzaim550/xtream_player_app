@@ -139,15 +139,17 @@ lifecycle-tied (a route option, a mounted element) is owned by the same system
 that owns the transition and cannot race it. **Do not reintroduce an imperative
 window call here.**
 
-- `VideoView` must keep `surfaceType="textureView"`. expo-video defaults to a
-  SurfaceView, which the view hierarchy never draws — it is composited *behind*
-  the window and seen only through a hole punched in whatever is drawn over it.
-  react-native-screens sets `LAYER_TYPE_HARDWARE` on a screen while it
-  transitions, and `presentation: 'fullScreenModal'` leaves the screen below
-  attached; both break the punch, and a broken punch is **audio with a black
-  picture**, on every title, with no error anywhere. TextureView is a normal
-  view, so it survives all of it. Both native views ship in the same expo-video
-  module, so this switch went out over the air.
+- `VideoView` must keep `useExoShutter`. expo-video sets the video surface to
+  `alpha = 0` on construction and brings it back only inside its own
+  `onRenderedFirstFrame`, which in SDK 56 is guarded by
+  `if (player.currentVideoView == this)` — a guard 3.x does not have. When the
+  first frame arrives at a moment that guard is false, nothing ever re-runs it,
+  and the film plays to completion into an invisible surface: **audio over a
+  black picture, every title, no error anywhere.** `useExoShutter` opts into
+  media3's own shutter instead — surface alpha stays 1, PlayerView covers it
+  until its own first frame, on a listener with no such guard. Verified by
+  diffing against `~/Desktop/kaizen-app`, which plays the same server fine on
+  expo-video 3.0.16.
 - `expo-screen-orientation` is still a dependency with no importer. That is
   deliberate: it is a native module, so keeping it in the APK is what would let
   a landscape regression be fixed over the air rather than with another build.

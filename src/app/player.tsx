@@ -110,6 +110,8 @@ export default function PlayerScreen() {
    * which is why it can look like a black screen rather than a failure.
    */
   const [probe, setProbe] = useState<string | null>(null);
+  /** Set by VideoView's onFirstFrameRender: a frame reached the surface. */
+  const [firstFrame, setFirstFrame] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const hasSeeked = useRef(false);
   /** Latched by leave(), so playback can only be exited once. */
@@ -398,28 +400,39 @@ export default function PlayerScreen() {
           needs no native module; it hid the status bar but not this. Rendered
           only in the playback tree, so the error screen above keeps its bar. */}
       <NavigationBar hidden />
-      {/* surfaceType is load-bearing: expo-video defaults to a SurfaceView,
-          which is not drawn by the view hierarchy at all. It is composited
-          *behind* the app window, and is only visible through a hole the view
-          punches in everything drawn above it. Two things this screen does
-          break that hole. react-native-screens sets LAYER_TYPE_HARDWARE on a
-          Screen while it transitions, and a hardware layer renders the punch
-          into an offscreen texture instead of the window. And
-          `presentation: 'fullScreenModal'` keeps the screen underneath
-          attached, so there is opaque content in the window either side of it.
-          Either way the audio plays and the picture is black.
+      {/* useExoShutter is load-bearing, and it is why this screen played audio
+          over a black picture on every title.
 
-          A TextureView is an ordinary view in the hierarchy, so it survives
-          hardware layers, alpha animations, rotation and the modal. It costs a
-          little more GPU and rules out HDR passthrough, neither of which this
-          app uses. Do not "optimise" this back to surfaceView. */}
+          expo-video hides the video surface by setting its alpha to 0 from the
+          moment the view is constructed, and the *only* thing that ever brings
+          it back is its own `onRenderedFirstFrame`:
+
+            override fun onRenderedFirstFrame(player: VideoPlayer) {
+              if (player.currentVideoView == this) { ...alpha = 1... }
+            }
+
+          That guard is new in expo-video 56 (3.x has the same method with no
+          `if`). When the first frame lands at a moment the player does not
+          consider this view current -- which this screen manages reliably,
+          being a fullScreenModal that rotates to landscape as it opens -- the
+          branch is skipped, and nothing else ever re-runs it. The decoder is
+          fine, the audio is fine, the frames are fine; they are drawn into a
+          surface left at alpha 0 for the rest of the film.
+
+          Setting this to true opts into media3's own shutter instead: the
+          surface alpha stays 1, and PlayerView covers it with a black view
+          until *its* first frame, on a listener attached straight to the
+          ExoPlayer with no such guard. That is the same path expo-video 3.x
+          took, which is why the other app on this API never had this bug. */}
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}
-        surfaceType="textureView"
+        useExoShutter
         nativeControls={Layout.useNativeControls}
         contentFit="contain"
         fullscreenOptions={{ enable: !Layout.useNativeControls }}
+        // Diagnostic: proves frames reached the surface. See `probe`.
+        onFirstFrameRender={() => setFirstFrame(true)}
       />
 
       {!ready ? (
@@ -433,7 +446,7 @@ export default function PlayerScreen() {
           player={player}
           title={params.title || 'Playing'}
           subtitle={episodeLabel}
-          probe={probe}
+          probe={probe ? `${probe} · frame ${firstFrame ? 'yes' : 'NO'}` : null}
           onBack={leave}
           onOpenExternally={openExternally}
         />
