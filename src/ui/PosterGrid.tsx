@@ -7,7 +7,13 @@
  */
 
 import { useCallback, useRef } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { FocusSection } from './FocusSection';
 import { PosterCard } from './PosterCard';
 import { IS_TV, Layout, OVERSCAN, Palette, Type } from './platform';
@@ -37,6 +43,14 @@ export function PosterGrid({
   header,
 }: PosterGridProps) {
   const listRef = useRef<FlatList<PosterGridItem>>(null);
+  const { width: screenWidth } = useWindowDimensions();
+
+  // A fixed poster width cannot know how wide the device is, so the last column
+  // used to hang off the edge. Divide the row up instead: the content padding
+  // plus each card's gap/2 margins are what the cards have to share.
+  const cardWidth = IS_TV
+    ? Layout.posterWidth
+    : (screenWidth - 2 * CONTENT_PAD) / Layout.gridColumns - Layout.gap;
 
   // The native focus engine does not reliably scroll a virtualised list to keep
   // the focused row visible, so drive it from the focus event instead.
@@ -83,6 +97,7 @@ export function PosterGrid({
         }}
         renderItem={({ item, index }) => (
           <PosterCard
+            width={cardWidth}
             title={item.title}
             posterUrl={item.posterUrl}
             qualityLabel={item.qualityLabel}
@@ -101,10 +116,13 @@ export function PosterGrid({
   );
 }
 
+/** Cards carry gap/2 of margin each side, so the list pads by that much less. */
+const CONTENT_PAD = OVERSCAN.horizontal - Layout.gap / 2;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: {
-    paddingHorizontal: OVERSCAN.horizontal - Layout.gap / 2,
+    paddingHorizontal: CONTENT_PAD,
     paddingVertical: OVERSCAN.vertical,
   },
   row: { justifyContent: 'flex-start' },

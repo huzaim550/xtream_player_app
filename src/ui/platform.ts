@@ -39,7 +39,9 @@ export const Layout = {
   posterWidth: IS_TV ? 220 : 120,
   /** Standard 2:3 movie poster. */
   posterAspect: 2 / 3,
-  gridColumns: IS_TV ? 6 : 3,
+  // Three fixed-width columns overflowed a phone's width, clipping the last
+  // card. Two columns fit, and PosterGrid widens the cards to fill the row.
+  gridColumns: IS_TV ? 6 : 2,
   gap: IS_TV ? 20 : 12,
   rowGap: IS_TV ? 32 : 20,
   /** Android's minimum touch target; TV focus targets want a little more. */
