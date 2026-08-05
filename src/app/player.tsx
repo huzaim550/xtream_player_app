@@ -112,6 +112,16 @@ export default function PlayerScreen() {
   const [probe, setProbe] = useState<string | null>(null);
   /** Set by VideoView's onFirstFrameRender: a frame reached the surface. */
   const [firstFrame, setFirstFrame] = useState(false);
+  /**
+   * Forces the video surface visible. See the comment on <VideoView> below --
+   * this flips true -> false one tick after mount on purpose, and the flip is
+   * the entire point.
+   */
+  const [shutter, setShutter] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShutter(false), 500);
+    return () => clearTimeout(t);
+  }, []);
   const [countdown, setCountdown] = useState<number | null>(null);
   const hasSeeked = useRef(false);
   /** Latched by leave(), so playback can only be exited once. */
@@ -400,34 +410,48 @@ export default function PlayerScreen() {
           needs no native module; it hid the status bar but not this. Rendered
           only in the playback tree, so the error screen above keeps its bar. */}
       <NavigationBar hidden />
-      {/* useExoShutter is load-bearing, and it is why this screen played audio
-          over a black picture on every title.
+      {/* `useExoShutter={shutter}` is load-bearing, and the fact that it flips
+          from true to false half a second after mount is the whole trick. This
+          is what stops playback being audio over a black picture.
 
-          expo-video hides the video surface by setting its alpha to 0 from the
-          moment the view is constructed, and the *only* thing that ever brings
-          it back is its own `onRenderedFirstFrame`:
+          expo-video keeps the video surface at alpha 0 until it decides the
+          first frame has arrived. In 56.1.4 that decision is gated on the
+          surface's aspect ratio matching the video's:
 
-            override fun onRenderedFirstFrame(player: VideoPlayer) {
-              if (player.currentVideoView == this) { ...alpha = 1... }
+            val hasCorrectRatio = abs(trackAspect - surfaceAspect) < 0.05
+            return hasCorrectRatio || hasFillContentFit || videoSizeIsUnknown
+
+          (FirstFrameEventGenerator.isPlayerSurfaceLayoutValid). Our surface is
+          the full screen -- 2340x1080, 2.167 -- and this library is full of
+          2.35:1 films: 1130x480 is 2.354. The difference is 0.19, the gate
+          never passes, the event is never emitted, and the surface it would
+          have revealed stays invisible while media3 renders 25fps into it.
+          Verified on the device: `mRenderFrameCnt = 25 fps` with a black
+          screen.
+
+          `useExoShutter` is meant to opt out of that whole mechanism, but its
+          setter is also wrong:
+
+            set(value) {
+              ...
+              applySurfaceViewVisibility()   // reads the OLD field
+              field = value                  // assigned after
             }
 
-          That guard is new in expo-video 56 (3.x has the same method with no
-          `if`). When the first frame lands at a moment the player does not
-          consider this view current -- which this screen manages reliably,
-          being a fullScreenModal that rotates to landscape as it opens -- the
-          branch is skipped, and nothing else ever re-runs it. The decoder is
-          fine, the audio is fine, the frames are fine; they are drawn into a
-          surface left at alpha 0 for the rest of the film.
+          so setting it true does nothing -- the visibility call still sees
+          null. Setting it *false* while the field holds true is what takes the
+          `else` branch and puts the surface back to alpha 1, with a
+          transparent shutter over it. Hence true on mount, false on the next
+          tick.
 
-          Setting this to true opts into media3's own shutter instead: the
-          surface alpha stays 1, and PlayerView covers it with a black view
-          until *its* first frame, on a listener attached straight to the
-          ExoPlayer with no such guard. That is the same path expo-video 3.x
-          took, which is why the other app on this API never had this bug. */}
+          This is a workaround for someone else's bug, and it will stop being
+          necessary when expo-video fixes either the gate or the setter -- at
+          which point delete it and set nothing. Until then, do not "simplify"
+          it to a constant: a constant cannot flip, and the flip is the fix. */}
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}
-        useExoShutter
+        useExoShutter={shutter}
         nativeControls={Layout.useNativeControls}
         contentFit="contain"
         fullscreenOptions={{ enable: !Layout.useNativeControls }}
