@@ -363,9 +363,25 @@ export default function PlayerScreen() {
           needs no native module; it hid the status bar but not this. Rendered
           only in the playback tree, so the error screen above keeps its bar. */}
       <NavigationBar hidden />
+      {/* surfaceType is load-bearing: expo-video defaults to a SurfaceView,
+          which is not drawn by the view hierarchy at all. It is composited
+          *behind* the app window, and is only visible through a hole the view
+          punches in everything drawn above it. Two things this screen does
+          break that hole. react-native-screens sets LAYER_TYPE_HARDWARE on a
+          Screen while it transitions, and a hardware layer renders the punch
+          into an offscreen texture instead of the window. And
+          `presentation: 'fullScreenModal'` keeps the screen underneath
+          attached, so there is opaque content in the window either side of it.
+          Either way the audio plays and the picture is black.
+
+          A TextureView is an ordinary view in the hierarchy, so it survives
+          hardware layers, alpha animations, rotation and the modal. It costs a
+          little more GPU and rules out HDR passthrough, neither of which this
+          app uses. Do not "optimise" this back to surfaceView. */}
       <VideoView
         style={StyleSheet.absoluteFill}
         player={player}
+        surfaceType="textureView"
         nativeControls={Layout.useNativeControls}
         contentFit="contain"
         fullscreenOptions={{ enable: !Layout.useNativeControls }}
