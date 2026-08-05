@@ -27,15 +27,29 @@ npm test                # jest (unit only -- see jest.config.js for why)
 
 ## Shipping a fix
 
-`expo-updates` is configured against the EAS project, so **JS-only fixes go out
-over the air** — `eas update --branch <channel>` — with no rebuild or reinstall.
+**`SHIPPING.md` is the full guide** — read it before building anything. The
+short version:
+
+Builds run on the self-hosted Axe server (`~/Documents/android_app_builder`),
+not EAS. `eas.json` is still here but nothing uses it.
+
+```bash
+axe build --type update --release     # JS-only fix, ~20s, user opens the app twice
+axe build --type apk --ota --release  # anything native, 8-15 min, user installs by hand
+```
+
+`axe build` uploads the **working tree**, not your last commit — including
+`.env`, which is gitignored and load-bearing (`EXPO_PUBLIC_DEFAULT_SERVER_URL`
+is inlined at build time).
 
 `runtimeVersion` uses the `appVersion` policy, which makes `version` in
 `app.config.ts` the compatibility contract: **bump it whenever you add or
 remove a native module.** If you don't, old installs will happily download JS
 that calls a native module their APK does not contain, and crash at startup —
 which is exactly what adding `expo-file-system` did once already. Native
-changes always need a real build and a reinstall.
+changes always need a real build and a reinstall. `android.versionCode` is a
+separate counter and must go up on every released APK, or Android refuses the
+install and `useAppUpdate` never offers it.
 
 When something does crash, `(app)/diagnostics.tsx` (Settings → Diagnostics)
 shows the last 20 errors with stack traces, read from disk so the crash from
