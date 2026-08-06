@@ -90,19 +90,11 @@ export function openUpdateDownload(update: AvailableUpdate): void {
   void Linking.openURL(update.downloadUrl);
 }
 
-/**
- * Poll once per mount. Returns null until an update is known to exist.
- *
- * `enabled` is false in the Play build. This whole feature is a Device and
- * Network Abuse violation there, so it must not merely be hidden -- the request
- * must not happen either, or every Settings visit would ask a server for an
- * answer nothing is allowed to act on. See src/distribution.ts.
- */
-export function useAppUpdate(enabled = true): AvailableUpdate | null {
+/** Poll once per mount. Returns null until an update is known to exist. */
+export function useAppUpdate(): AvailableUpdate | null {
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
     let cancelled = false;
     void fetchAvailableUpdate().then((found) => {
       if (!cancelled) setUpdate(found);
@@ -110,7 +102,7 @@ export function useAppUpdate(enabled = true): AvailableUpdate | null {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, []);
 
   return update;
 }

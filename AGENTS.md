@@ -203,26 +203,6 @@ nothing until it is next opened; that is the deal, and the dashboard says so.
 - `src/content/privacy.ts` names this call. If the app ever sends anything about
   the user to that host, that file has to change with it.
 
-## Two distributions
-
-`EXPO_PUBLIC_DISTRIBUTION` (`sideload` by default, or `play`) decides what is in
-the binary — see `src/distribution.ts` and the table in `SHIPPING.md`. The Play
-flavour compiles out the in-app APK updater and self-hosted OTA, because an app
-that downloads and installs an APK violates Play's Device and Network Abuse
-policy. It is a build-time literal, so the store bundle does not merely hide
-those paths, it does not contain them.
-
-- Gate on `SELF_UPDATES`, not on `IS_PLAY`, wherever the question is really
-  "does this build update itself" — it reads as what it means at the call site.
-- `src/content/privacy.ts` is now published as well as bundled:
-  `npm run privacy:export` renders it into the landing-page repo, served at
-  `manzaronline.site/privacy`. Play requires that URL to stay reachable, so the
-  policy changing means regenerating **and deploying the landing page** — the
-  export is one command and forgetting it is silent.
-- The login screen ships with no server prefilled, deliberately. A player that
-  claims to work with any Xtream server but opens with one already typed in
-  argues against its own description.
-
 ## Advertising
 
 AdMob, and **which users see it is the Xtream server's decision, not the app's**.

@@ -32,16 +32,7 @@ import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
 import { ABSOLUTE_FILL, IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
 
-/*
- * No default server, deliberately.
- *
- * This field used to be prefilled from EXPO_PUBLIC_DEFAULT_SERVER_URL, which
- * was a kindness on a TV remote and a liability everywhere else: a player that
- * describes itself as working with any Xtream server, but opens with one
- * particular service already typed in, argues against its own description --
- * to a Play reviewer above all. The address is remembered after the first
- * successful sign-in, so this costs one typing, once.
- */
+const DEFAULT_SERVER = process.env.EXPO_PUBLIC_DEFAULT_SERVER_URL ?? '';
 const GLOW = require('@/assets/images/logo-glow.png') as number;
 
 export default function LoginScreen() {
@@ -50,7 +41,7 @@ export default function LoginScreen() {
   const notice = useSession((s) => s.notice);
   const failures = useSession((s) => s.consecutiveFailures);
 
-  const [server, setServer] = useState('');
+  const [server, setServer] = useState(DEFAULT_SERVER);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
