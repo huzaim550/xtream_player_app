@@ -276,6 +276,9 @@ and a failed handshake mean.
 ## Local dev against the server
 
 Run the Flask server from `~/Documents/xtream` on `0.0.0.0:8000`; reach it at
-`http://10.0.2.2:8000` from an emulator (cleartext is enabled in dev builds
-only). Offline test users (no R2 needed) are in the server repo's
+`http://10.0.2.2:8000` from an emulator. Cleartext HTTP is an explicit opt-in —
+set `EXPO_PUBLIC_ALLOW_CLEARTEXT=1` in `.env` and rebuild, or Android blocks
+every plain-http request. It used to key off `NODE_ENV`, which nothing sets on
+the Axe build server, so released builds were shipping cleartext enabled; never
+put that flag in a build you release. Offline test users (no R2 needed) are in the server repo's
 `tests/conftest.py`. The de-facto wire contract is `tests/test_player_api.py`.

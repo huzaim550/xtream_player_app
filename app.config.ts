@@ -11,11 +11,17 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  */
 
 /**
- * Cleartext HTTP is needed only to reach a local dev server (http://10.0.2.2:8000).
- * The live server is HTTPS behind a Cloudflare tunnel, so release builds must
- * not carry this.
+ * Cleartext HTTP exists only to reach a local dev server (http://10.0.2.2:8000).
+ * The live server is HTTPS behind a Cloudflare tunnel, so no shipped build
+ * should carry it.
+ *
+ * This used to key off `NODE_ENV !== 'production'`, which was wrong in the one
+ * place it mattered: nothing sets NODE_ENV on the Axe build server, so every
+ * build it produced shipped cleartext enabled. An explicit opt-in cannot be got
+ * wrong by omission -- set EXPO_PUBLIC_ALLOW_CLEARTEXT=1 in .env when you are
+ * pointing the app at a local server, and never in a build you release.
  */
-const allowCleartext = process.env.NODE_ENV !== 'production';
+const allowCleartext = process.env.EXPO_PUBLIC_ALLOW_CLEARTEXT === '1';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -70,6 +76,21 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * integer Android orders installs by; `version` above is only the label.
      */
     versionCode: 6,
+    /**
+     * Permissions the app has never used, removed rather than carried.
+     *
+     * Expo's template starts every project with these, and nothing in src/
+     * touches any of them: downloads go to Paths.document, which is app-private
+     * and needs no storage permission, and nothing draws over other apps.
+     *
+     * INTERNET, ACCESS_NETWORK_STATE, WAKE_LOCK and AD_ID stay: they come from
+     * expo-video, expo-updates and play-services-ads, and are actually used.
+     */
+    blockedPermissions: [
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+    ],
   },
   plugins: [
     'expo-router',
