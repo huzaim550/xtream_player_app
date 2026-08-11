@@ -72,8 +72,16 @@ try {
   // against its runtimeVersion would be dead weight at best -- and at worst a
   // sideloaded 1.3.0 phone picking up a bundle built from a store tree, with
   // the updater compiled out of it.
+  //
+  // No --release either, and that one is load-bearing. Releasing with no flags
+  // promotes "whatever this build produced", and the server counts an aab as
+  // something the APK channel can serve -- so a store build would retire the
+  // sideload APK and offer phones a file Android cannot install (useAppUpdate
+  // compares versionCode and never looks at buildType). A store artifact has
+  // nowhere to be released to anyway: it goes to Play, by hand, from the
+  // dashboard. Promote sideload builds explicitly with `axe release <id>`.
   status =
-    spawnSync('axe', ['build', '--type', buildType, '--release'], {
+    spawnSync('axe', ['build', '--type', buildType], {
       cwd: ROOT,
       stdio: 'inherit',
     }).status ?? 1;

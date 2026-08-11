@@ -134,19 +134,37 @@ Once, and then never lose it. If it is lost, and Play App Signing has not been
 enrolled with a separate app signing key, the listing cannot be updated ever
 again.
 
+Generate it **outside this repo**. `axe build` tars the whole working tree and
+does not exclude `.jks`, so a key left in the project folder is uploaded to the
+build server inside every source tarball from then on. `.gitignore` does not
+help; git is not what packs the tarball.
+
 ```bash
+mkdir -p ~/keys && chmod 700 ~/keys
 keytool -genkeypair -v \
-  -keystore manzar-upload.jks -alias manzar-upload \
+  -keystore ~/keys/manzar-upload.jks -alias manzar-upload \
   -keyalg RSA -keysize 2048 -validity 10000
+chmod 600 ~/keys/manzar-upload.jks
 ```
 
-Back it up somewhere that is not this machine, along with both passwords.
+Press Enter at the last prompt (`Enter key password for <manzar-upload>`) so the
+key password matches the store password — one secret to keep, not two. Back the
+file and that password up somewhere that is not this machine.
 
-Then upload it to the build server (Axe dashboard → the `xtream-player-app`
-project → Keystore, or `POST /api/projects/xtream-player-app/keystore` with
-`keystore`, `keyAlias`, `storePassword`, `keyPassword`). Without it the AAB is
-debug-signed and Play refuses the upload with a message that does not explain
-why.
+Then hand a copy to the build server, from this folder:
+
+```bash
+axe keystore set ~/keys/manzar-upload.jks
+```
+
+It prompts for the password, reads the alias out of the keystore, and takes the
+slug from `axe.json` — nothing to type from memory. `axe keystore` shows what is
+configured; `axe keystore rm` removes it. There is no dashboard form for this;
+the endpoint underneath is `POST /api/projects/xtream-player-app/keystore` if
+you ever need to script it.
+
+Without a key the AAB is debug-signed and Play refuses the upload with a message
+that does not explain why.
 
 ---
 
@@ -168,6 +186,15 @@ a Ctrl-C still puts it back.
 Download the AAB from the Axe dashboard and upload it by hand. There is no
 Play publishing API wired up, and for a listing that ships a few times a year
 there does not need to be.
+
+**A store build is never released on the Axe server**, and the script does not
+pass `--release` for that reason. Releasing with no flags promotes "whatever
+this build produced", and the server counts an `aab` as something the APK
+channel can serve — so a store build would retire the sideload APK and start
+offering the family a file Android cannot install (`useAppUpdate` compares
+`versionCode` and never looks at `buildType`). The store artifact's only
+destination is the Play Console. Promote *sideload* builds explicitly, with
+`axe release last`.
 
 **Bump `android.versionCode` in `app.config.ts` on every upload.** Play never
 lets a code be reused, and the counter is shared with the sideloaded flavour, so
