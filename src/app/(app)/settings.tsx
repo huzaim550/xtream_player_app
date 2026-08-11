@@ -51,7 +51,7 @@ export default function SettingsScreen() {
   const [probeError, setProbeError] = useState<string | null>(null);
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [wiping, setWiping] = useState(false);
-  const adsEnabled = useAds((s) => adsOn(s.config));
+  const adsEnabled = adsOn();
   const revalidate = useSession((s) => s.revalidate);
   // Everything this screen shows about the account -- connections in use,
   // expiry, status, whether ads are on -- comes from the handshake, which is

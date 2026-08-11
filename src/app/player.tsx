@@ -351,7 +351,7 @@ export default function PlayerScreen() {
     if (firstLoad) {
       breaksPlanned.current = true;
       pendingBreaks.current = adsAllowed
-        ? midRollPoints(adsConfig, duration, target)
+        ? midRollPoints(duration, target)
         : [];
     }
     hasSeeked.current = true;
@@ -359,7 +359,7 @@ export default function PlayerScreen() {
     // The pre-roll replaces this play() rather than preceding it: runAd()
     // pauses and resumes around the ad, so starting playback first would leak a
     // second or two of film before the advert.
-    if (firstLoad && adsAllowed && preRollOn(adsConfig)) {
+    if (firstLoad && adsAllowed && preRollOn()) {
       void runAd();
       return;
     }

@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { initAds, unitId } from '@/ads';
-import { bannerOn, useAds } from '@/store/ads';
+import { bannerOn } from '@/store/ads';
 import { useSession } from '@/store/session';
 import type { AdSurface } from '@/types/domain';
 import { IS_TV, Palette } from '@/ui/platform';
@@ -28,7 +28,7 @@ export interface AdBannerProps {
 export function AdBanner({ surface }: AdBannerProps) {
   // A zustand selector, not a useMemo: selectors re-run on every store change,
   // and the React Compiler would freeze a memo at mount. See AGENTS.md.
-  const show = useAds((s) => bannerOn(s.config, surface));
+  const show = bannerOn(surface);
   const offline = useSession((s) => s.offline);
   const [ready, setReady] = useState(false);
 

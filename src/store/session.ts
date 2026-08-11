@@ -106,7 +106,6 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const raw = await handshake(session);
       const account = toAccount(raw);
-      useAds.getState().applyHandshake(raw);
       set({
         session,
         account,
@@ -154,7 +153,6 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const raw = await handshake(session);
       const account = toAccount(raw);
-      useAds.getState().applyHandshake(raw);
       const { secure } = await setPassword(password);
       await Promise.all([
         writeString(Keys.serverUrl, baseUrl),
@@ -225,7 +223,6 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const raw = await handshake(session);
       const account = toAccount(raw);
-      useAds.getState().applyHandshake(raw);
       set({ account, offline: false, lastRevalidatedAt: Date.now() });
       await writeJson(Keys.account, account);
     } catch (err) {

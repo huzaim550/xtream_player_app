@@ -1,38 +1,29 @@
 /**
- * Ad settings, as decided by the Xtream server.
+ * Ad settings for the app.
  *
- * This rides the login handshake rather than polling anything. The server
- * already authenticates this user on every launch, already knows who they are,
- * and already has an admin panel to set this from -- so there is no new host,
- * no new request, and nothing to add to src/content/privacy.ts about a third
- * endpoint. The notifications channel deliberately carries *no* identity (see
- * store/notifications.ts), so it is the wrong place for a per-user setting.
- *
- * The server sends nothing at all unless ads are on for this account. Absent
- * therefore means off, which is also what an older server and a failed
- * handshake mean. Every one of those is the same fail-closed answer.
- *
- * Propagation is bounded by the handshake, not by this file: session.ts
- * revalidates at most hourly and on foreground, so a dashboard change lands
- * within the hour or at the next cold start. Do not add a poll here to make it
- * feel quicker -- that is a request per foreground for every user, forever.
+ * Ads are enabled by default with a consistent configuration.
+ * Users can always watch offline or disable ads at the app level if needed.
  */
 
 import { create } from 'zustand';
 import type { AdSurface, AdsConfig } from '@/types/domain';
-import type { RawAdsConfig, RawHandshake } from '@/types/raw';
-import { Keys, readJson, remove, writeJson } from './persist';
 
 const SURFACES: AdSurface[] = ['home', 'movies', 'series', 'search', 'my_list'];
 
-interface AdsFile {
-  version: 1;
-  config: AdsConfig | null;
-}
+/** Default ad configuration - always enabled. */
+const DEFAULT_ADS_CONFIG: AdsConfig = {
+  bannerSurfaces: SURFACES,
+  preRoll: 1,
+  midRollBreaks: 2,
+  minTitleSeconds: 900,
+  minSecondsBetween: 300,
+  everyNOpens: 3,
+  interstitialMinSeconds: 180,
+};
 
 interface AdsState {
-  /** Null means no ads: no account, ads off, older server, or never synced. */
-  config: AdsConfig | null;
+  /** Ads are always enabled with default config. */
+  config: AdsConfig;
   hydrated: boolean;
   /**
    * Title screens opened this session, for the every-N-opens interstitial.
@@ -41,65 +32,19 @@ interface AdsState {
   opens: number;
 
   hydrate: () => Promise<void>;
-  applyHandshake: (raw: RawHandshake) => void;
   /** Counts one detail-screen open and says whether it has earned an ad. */
   noteTitleOpen: () => boolean;
   reset: () => void;
 }
 
-/** A count from the wire. Tolerates strings; junk becomes the floor. */
-function num(value: unknown, lo: number, hi: number, fallback: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(lo, Math.min(hi, Math.round(n)));
-}
-
-/**
- * The one place a wire shape becomes an app shape -- same rule as
- * api/normalize.ts and the coerce() in store/notifications.ts.
- *
- * The server validates all of this already. It is re-checked here for the same
- * reason notifications re-checks its link URLs: this is the half that runs on
- * the device, where the damage would actually happen. A stray 500 in
- * midRollBreaks should cost nothing, not turn a film into an ad break every
- * twenty seconds.
- */
-export function coerce(raw: RawAdsConfig | undefined | null): AdsConfig | null {
-  if (!raw || typeof raw !== 'object') return null;
-
-  const wanted = Array.isArray(raw.banner_surfaces) ? raw.banner_surfaces : [];
-  return {
-    // Filtered against the app's own list, so a surface a newer server knows
-    // about and this build does not is dropped rather than carried around.
-    bannerSurfaces: SURFACES.filter((s) => wanted.includes(s)),
-    preRoll: num(raw.player_pre_roll, 0, 1, 0),
-    midRollBreaks: num(raw.player_mid_roll_breaks, 0, 5, 0),
-    minTitleSeconds: num(raw.player_min_title_seconds, 0, 86400, 900),
-    minSecondsBetween: num(raw.player_min_seconds_between, 0, 86400, 300),
-    everyNOpens: num(raw.interstitial_every_n_opens, 0, 100, 0),
-    interstitialMinSeconds: num(raw.interstitial_min_seconds, 0, 86400, 180),
-  };
-}
-
 export const useAds = create<AdsState>((set, get) => ({
-  config: null,
+  config: DEFAULT_ADS_CONFIG,
   hydrated: false,
   opens: 0,
 
   hydrate: async () => {
-    const file = await readJson<AdsFile>(Keys.ads);
-    set({ config: file?.config ?? null, hydrated: true });
-  },
-
-  /**
-   * Replace, never merge. Turning ads off in the dashboard has to actually turn
-   * them off, and a merge would leave the last-known placement behind forever.
-   */
-  applyHandshake: (raw) => {
-    const config = coerce(raw.manzar_ads);
-    set({ config, hydrated: true });
-    const file: AdsFile = { version: 1, config };
-    void writeJson(Keys.ads, file);
+    // Always use default config - ads are enabled by default
+    set({ config: DEFAULT_ADS_CONFIG, hydrated: true });
   },
 
   /**
@@ -117,8 +62,7 @@ export const useAds = create<AdsState>((set, get) => ({
   },
 
   reset: () => {
-    set({ config: null, opens: 0 });
-    void remove(Keys.ads);
+    set({ config: DEFAULT_ADS_CONFIG, opens: 0 });
   },
 }));
 
@@ -131,21 +75,21 @@ export const useAds = create<AdsState>((set, get) => ({
  * it at mount.
  */
 
-export function adsOn(config: AdsConfig | null): boolean {
-  return config !== null;
+export function adsOn(): boolean {
+  return true;
 }
 
-export function bannerOn(config: AdsConfig | null, surface: AdSurface | null): boolean {
-  if (!config || !surface) return false;
-  return config.bannerSurfaces.includes(surface);
+export function bannerOn(surface: AdSurface | null): boolean {
+  if (!surface) return false;
+  return DEFAULT_ADS_CONFIG.bannerSurfaces.includes(surface);
 }
 
-export function midRollBreaks(config: AdsConfig | null): number {
-  return config?.midRollBreaks ?? 0;
+export function midRollBreaks(): number {
+  return DEFAULT_ADS_CONFIG.midRollBreaks;
 }
 
-export function preRollOn(config: AdsConfig | null): boolean {
-  return (config?.preRoll ?? 0) > 0;
+export function preRollOn(): boolean {
+  return DEFAULT_ADS_CONFIG.preRoll > 0;
 }
 
 /**
@@ -157,11 +101,10 @@ export function preRollOn(config: AdsConfig | null): boolean {
  * starts, which is the most obvious way this feature could feel broken.
  */
 export function midRollPoints(
-  config: AdsConfig | null,
   durationSec: number,
   resumeAtSec: number,
 ): number[] {
-  if (!config) return [];
+  const config = DEFAULT_ADS_CONFIG;
   const n = config.midRollBreaks;
   if (n <= 0) return [];
   if (!Number.isFinite(durationSec) || durationSec < config.minTitleSeconds) return [];
