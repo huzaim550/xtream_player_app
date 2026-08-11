@@ -1,6 +1,12 @@
 # Shipping Manzar
 
-How a change on this machine becomes a change on somebody's phone.
+How a change on this machine becomes a change on somebody's phone — **the
+sideloaded build**, installed by hand from the Axe server.
+
+> The Play Store build is a different binary from the same tree, with no
+> updater, no OTA and its own signing key. **See `PLAY.md`.** Nothing in this
+> document applies to it, and in particular `axe build --type update` cannot
+> reach a phone that installed from Play.
 
 Builds run on **Axe Build** — the self-hosted build server in
 `~/Documents/android_app_builder`, reachable at `http://192.168.1.200:3000` on

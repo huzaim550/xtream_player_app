@@ -1,5 +1,6 @@
 /**
- * "A newer APK exists" check.
+ * "A newer APK exists" check. **Sideload builds only** -- see SELF_UPDATES in
+ * src/distribution.ts, and `enabled` on the hook at the bottom of this file.
  *
  * This covers the half of updating that expo-updates cannot. A JS-only change
  * arrives over the air by itself, but anything native -- a new module, an Expo
@@ -23,8 +24,24 @@ import { Linking } from 'react-native';
 /**
  * Where the self-hosted build server publishes releases. Same host the OTA
  * manifest is served from (see `updates.url` in app.config.ts).
+ *
+ * Written as a fold rather than a plain constant so the URL is not merely
+ * unreachable in the Play bundle but absent from it. `process.env.EXPO_PUBLIC_*`
+ * is inlined as a literal, and the minifier collapses the ternary *within this
+ * module* -- which is the part that works. It would not work through
+ * `IS_PLAY` imported from src/distribution.ts: Metro does no cross-module
+ * constant propagation, so every gate spelled that way stays a runtime branch.
+ * That is fine for the branches (they are simply never taken), and not fine for
+ * this one string, which is an APK download endpoint sitting next to a
+ * `Linking.openURL` in an artifact a Play reviewer may decompile.
+ *
+ * Verified, not assumed: `strings` over the exported .hbc finds it in a
+ * sideload export and not in a play one.
  */
-const UPDATE_API = 'https://updates.manzaronline.site/api/apps/xtream-player-app/latest';
+const UPDATE_API =
+  process.env.EXPO_PUBLIC_DISTRIBUTION === 'play'
+    ? ''
+    : 'https://updates.manzaronline.site/api/apps/xtream-player-app/latest';
 
 /** The server is a home box behind Cloudflare; a cold call can take seconds. */
 const TIMEOUT_MS = 12000;
@@ -52,6 +69,11 @@ function installedVersionCode(): number | null {
 }
 
 export async function fetchAvailableUpdate(): Promise<AvailableUpdate | null> {
+  // Empty in the Play build, where the URL is folded away above. Belt and
+  // braces: the caller already does not call this there, and if that ever
+  // stopped being true this must not fetch a relative path.
+  if (!UPDATE_API) return null;
+
   const installed = installedVersionCode();
   if (installed === null) return null;
 
@@ -90,11 +112,19 @@ export function openUpdateDownload(update: AvailableUpdate): void {
   void Linking.openURL(update.downloadUrl);
 }
 
-/** Poll once per mount. Returns null until an update is known to exist. */
-export function useAppUpdate(): AvailableUpdate | null {
+/**
+ * Poll once per mount. Returns null until an update is known to exist.
+ *
+ * `enabled` is false in the Play build. The whole feature is a Device and
+ * Network Abuse violation there, so it must not merely be hidden -- the request
+ * must not happen either, or every Settings visit would ask a home server for
+ * an answer nothing is allowed to act on. See src/distribution.ts.
+ */
+export function useAppUpdate(enabled = true): AvailableUpdate | null {
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void fetchAvailableUpdate().then((found) => {
       if (!cancelled) setUpdate(found);
@@ -102,7 +132,7 @@ export function useAppUpdate(): AvailableUpdate | null {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   return update;
 }

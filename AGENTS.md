@@ -9,8 +9,11 @@ The app is branded **Manzar** (`app.config.ts` `name`). The slug
 (`xtream-player`), the scheme and the Android package id
 (`site.manzaronline.xtream`) deliberately keep their original values — the slug
 ties the project to its EAS id, and changing the package id would orphan every
-existing install's data. Brand assets in `assets/images/` are generated from the
-SVG sources; `Palette.brand` is the red that carries it through the UI.
+existing install's data. The mark is a television with rabbit-ear antennas and a
+play triangle; every raster in `assets/images/` and `assets/store/` is generated
+from the SVG sources in `assets/brand/` and none should be hand-edited — see
+that directory's README, which documents the two pieces of geometry that will
+bite you. `Palette.brand` is the red that carries it through the UI.
 
 Expo has changed across versions: consult the versioned docs at
 https://docs.expo.dev/versions/v56.0.0/ before writing Expo-API code.
@@ -27,8 +30,13 @@ npm test                # jest (unit only -- see jest.config.js for why)
 
 ## Shipping a fix
 
-**`SHIPPING.md` is the full guide** — read it before building anything. The
-short version:
+**`SHIPPING.md` is the full guide** — read it before building anything.
+**`PLAY.md` is the Play Store one**, and they describe different binaries:
+`EXPO_PUBLIC_DISTRIBUTION=play` drops the in-app APK updater (a Device and
+Network Abuse violation), disables self-hosted OTA, forces cleartext off and
+removes the server prefill. `src/distribution.ts` is the switch and documents
+how much of that is compile-time and how much is runtime. The short version of
+the sideload path:
 
 Builds run on the self-hosted Axe server (`~/Documents/android_app_builder`),
 not EAS. `eas.json` is still here but nothing uses it.

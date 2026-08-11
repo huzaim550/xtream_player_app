@@ -16,6 +16,18 @@
  *     enabled ads for the account
  *   - src/app/(app)/settings.tsx -- the deletion controls named here
  * If any of those change, this file has to change with them.
+ *
+ * Two consumers, and they must not drift: the in-app screen at
+ * src/app/(app)/privacy.tsx, and the public page that Play requires a URL for,
+ * which scripts/export-privacy.mjs renders from this same file. Never hand-edit
+ * the published copy.
+ *
+ * That second consumer is why this file imports nothing. The script runs under
+ * plain Node, which has neither the `@/` alias nor a bundler, so a single
+ * import here would break the published policy -- and the two flavours' worth
+ * of behaviour that would otherwise want a `SELF_UPDATES` branch (see
+ * src/distribution.ts) are stated in the prose instead, where they are true of
+ * both builds at once and legible to a reader who does not know there are two.
  */
 
 export const PRIVACY_UPDATED = 'August 2026';
@@ -45,7 +57,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
     heading: 'What leaves your device',
     body: [
       'The app talks to three hosts, and only three. The first is the server address you entered. It sends your username and password with each request, because that is how the Xtream protocol authenticates.',
-      'The second is Manzar’s own update server. The app asks it three things: whether a newer version of the app exists, whether there is a background update to install, and whether there are any announcements to show on the Notifications screen. Those requests carry nothing about you — no username, no account details, no device identifier, and nothing about what you watch. Like any web server, it does see your IP address.',
+      'The second is Manzar’s own server. Installed from Google Play, the app asks it one thing: whether there are any announcements to show on the Notifications screen. A copy installed by hand instead — this app is also distributed directly — additionally asks whether a newer version exists, and downloads background updates, because nothing else would tell it. None of those requests carry anything about you: no username, no account details, no device identifier, and nothing about what you watch. Like any web server, it does see your IP address.',
       'The third is Google, and only when your server has switched ads on for your account. See Advertising below for what is sent.',
       'When you play or download something, your server answers with a redirect to its own storage provider, and your device then fetches the video from there directly. That storage provider sees your IP address, as it would for any file download.',
       'There are no other network calls. No crash reporting, no telemetry, no social logins.',
@@ -60,9 +72,10 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
   {
     heading: 'Deleting your data',
     body: [
-      'Settings → Clear watch history removes every stored watch position and resume point.',
-      'The Downloads screen, in the account menu, lets you delete any downloaded file individually.',
-      'Signing out removes your stored password. Your server address, watch history and saved titles are kept so that signing back in does not start you from scratch.',
+      'Manzar has no account of its own, so there is no account here to delete. Your account belongs to whoever runs your server; ask them to close it, and ask them what they keep. Everything below is about this device.',
+      'Settings → Delete all app data removes the lot in one step: your saved password, your server address and username, your watch history, your saved titles, every downloaded file and the cached copy of your library. It asks first, and leaves you at the sign-in screen.',
+      'If you want something narrower: Settings → Clear watch history removes every stored watch position and resume point, and the Downloads screen in the account menu deletes any downloaded file individually.',
+      'Signing out removes your stored password. Your server address, watch history and saved titles are kept so that signing back in does not start you from scratch — use Delete all app data instead if you want those gone too.',
       'Uninstalling the app removes everything listed on this page from your device.',
     ],
   },
@@ -72,7 +85,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
       'Ads are supplied by Google AdMob. Whoever runs your server decides, for each account separately, whether you see them at all — and separately how many there are and where they appear: a banner while browsing, one before a film starts, and breaks during it.',
       'When ads are on for your account, Google receives what it needs to serve one: your IP address, your device’s advertising identifier unless you have opted out of it in Android’s settings, general information about your device and this app, and whether an ad was shown or tapped. It does not receive your username, your server address, or anything about what you watch — this app never sends those to Google, and the ad request happens on its own, not alongside anything you did.',
       'You can reset or delete your advertising identifier at any time in Android: Settings → Privacy → Ads. Doing so does not stop ads, but it unlinks them from your past activity.',
-      'Google’s own description of how it uses this data is at policies.google.com/technologies/ads. Ad content is limited to a general audience rating.',
+      'Google’s own description of how it uses this data is at policies.google.com/technologies/ads. The app asks Google for nothing rated above PG, so the ads themselves stay suitable for a broad audience whatever the account is watching.',
       'In regions where consent is legally required, a Google-supplied consent screen appears before the first ad, and your choices can be changed again from Settings.',
       'One note about Android’s permission list: the Google advertising component adds an “advertising ID” permission to the app, and it is listed for every install regardless of whether ads have been turned on for that account. The permission being present is not the same as it being used — nothing reads that identifier until your server enables ads for you.',
     ],
@@ -80,7 +93,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
   {
     heading: 'Children',
     body: [
-      'Manzar is a general-purpose media player and is not directed at children. It is not tagged for child-directed treatment, and ads shown in it are limited to a general audience content rating.',
+      'Manzar is a general-purpose media player and is not directed at children. It is not tagged for child-directed treatment, and the ads it requests are capped at a PG rating.',
       'The app itself collects nothing about anyone, of any age. When ads are on, what Google receives is described in the Advertising section above.',
     ],
   },

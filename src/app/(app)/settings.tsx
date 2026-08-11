@@ -15,12 +15,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { privacyOptionsRequired, showPrivacyOptions } from '@/ads';
 import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
+import { SELF_UPDATES } from '@/distribution';
 import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
 import { adsOn, useAds } from '@/store/ads';
 import { useCatalogue } from '@/store/catalogue';
 import { downloadedBytes, useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';
 import { useSession } from '@/store/session';
+import { wipeAllData } from '@/store/wipe';
 import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
 import { IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
@@ -47,6 +49,8 @@ export default function SettingsScreen() {
 
   const [probe, setProbe] = useState<RawHealth | null>(null);
   const [probeError, setProbeError] = useState<string | null>(null);
+  const [confirmWipe, setConfirmWipe] = useState(false);
+  const [wiping, setWiping] = useState(false);
   const adsEnabled = useAds((s) => adsOn(s.config));
   const revalidate = useSession((s) => s.revalidate);
   // Everything this screen shows about the account -- connections in use,
@@ -70,8 +74,9 @@ export default function SettingsScreen() {
     };
   }, []);
   // Null unless the build server is offering a higher versionCode than this
-  // install. JS-only changes arrive over the air and never surface here.
-  const update = useAppUpdate();
+  // install. JS-only changes arrive over the air and never surface here, and
+  // in the Play build the request is not made at all.
+  const update = useAppUpdate(SELF_UPDATES);
 
   const runProbe = async () => {
     if (!session) return;
@@ -132,7 +137,8 @@ export default function SettingsScreen() {
         <Row label="Storage used" value={formatBytes(used)} />
         <Text style={styles.hint}>
           Downloads are stored inside this app only. They are not visible to your
-          gallery or other apps, and are removed if you uninstall Manzar.And can be only viewed in the app.
+          gallery or other apps, and are removed if you uninstall Manzar, and can only be viewed
+          inside it.
         </Text>
       </Section>
 
@@ -177,33 +183,55 @@ export default function SettingsScreen() {
             fresh install and the update's short id once one has been applied;
             an update downloads on one launch and applies on the next, so a
             bundle that still says `embedded` means the app has been opened
-            once, not that the update failed. */}
-        <Row
-          label="Bundle"
-          value={
-            Updates.isEmbeddedLaunch
-              ? 'embedded (as shipped in the APK)'
-              : (Updates.updateId?.slice(0, 8) ?? 'unknown')
-          }
-        />
-        {!Updates.isEmbeddedLaunch && Updates.createdAt ? (
-          <Row label="Bundle built" value={Updates.createdAt.toLocaleString()} />
-        ) : null}
-        {update ? (
-          <Text style={styles.updateAvailable}>
-            Version {update.versionName ?? update.versionCode} is available
-            {formatUpdateSize(update.sizeBytes) ? ` · ${formatUpdateSize(update.sizeBytes)}` : ''}
-          </Text>
+            once, not that the update failed.
+
+            All of it is meaningless in the Play build, where updates.enabled is
+            false and the bundle is always the one inside the binary Play
+            installed -- so the whole block is dropped rather than left to
+            report `embedded` forever. */}
+        {SELF_UPDATES ? (
+          <>
+            <Row
+              label="Bundle"
+              value={
+                Updates.isEmbeddedLaunch
+                  ? 'embedded (as shipped in the APK)'
+                  : (Updates.updateId?.slice(0, 8) ?? 'unknown')
+              }
+            />
+            {!Updates.isEmbeddedLaunch && Updates.createdAt ? (
+              <Row label="Bundle built" value={Updates.createdAt.toLocaleString()} />
+            ) : null}
+            {update ? (
+              <Text style={styles.updateAvailable}>
+                Version {update.versionName ?? update.versionCode} is available
+                {formatUpdateSize(update.sizeBytes)
+                  ? ` · ${formatUpdateSize(update.sizeBytes)}`
+                  : ''}
+              </Text>
+            ) : (
+              <Text style={styles.hint}>
+                Content and layout changes install themselves in the background. This checks for the
+                larger updates that need a new install.
+              </Text>
+            )}
+          </>
         ) : (
           <Text style={styles.hint}>
-            Content and layout changes install themselves in the background. This checks for the
-            larger updates that need a new install.
+            Updates arrive through Google Play. This app does not download or install anything on
+            its own.
           </Text>
         )}
       </Section>
 
       <FocusSection autoFocus style={styles.actions}>
-        {update ? (
+        {/* The install button belongs to the sideloaded build alone: a store
+            build must not offer to fetch and install an APK, which is a Device
+            and Network Abuse violation. SELF_UPDATES is false there, so the
+            branch is never taken and useAppUpdate above never makes the
+            request -- see src/distribution.ts for why that is a runtime gate
+            and not a compile-time one. */}
+        {SELF_UPDATES && update ? (
           <Action
             label={`Install version ${update.versionName ?? update.versionCode}`}
             preferFocus
@@ -212,7 +240,7 @@ export default function SettingsScreen() {
         ) : null}
         <Action
           label={loading ? 'Refreshing…' : 'Refresh library'}
-          preferFocus={!update}
+          preferFocus={!(SELF_UPDATES && update)}
           onPress={() => session && refresh(session, { force: true })}
         />
         <Action label="Check server" onPress={runProbe} />
@@ -225,6 +253,16 @@ export default function SettingsScreen() {
           danger
           onPress={() => void clearDownloads()}
         />
+        {/* The one control that answers "I want my data gone" without asking
+            someone to work out which of the three buttons above is enough.
+            Confirmed, unlike its neighbours: those are each recoverable by
+            re-downloading or re-watching, and this one ends at the login
+            screen with nothing left. */}
+        <Action
+          label={wiping ? 'Deleting…' : 'Delete all app data'}
+          danger
+          onPress={() => setConfirmWipe(true)}
+        />
         <Action
           label="Sign out"
           danger
@@ -234,6 +272,41 @@ export default function SettingsScreen() {
           }}
         />
       </FocusSection>
+
+      {confirmWipe ? (
+        <View style={styles.confirm}>
+          <Text style={styles.confirmTitle}>Delete all app data?</Text>
+          <Text style={styles.hint}>
+            This removes your saved password, server address, watch history, saved titles,
+            downloaded files and cached library from this device. It does not touch your account
+            on the server, or anything the server itself has recorded.
+          </Text>
+          <FocusSection autoFocus style={styles.actions}>
+            <Action
+              label="Delete everything"
+              danger
+              preferFocus
+              onPress={async () => {
+                if (wiping) return;
+                setWiping(true);
+                try {
+                  await wipeAllData();
+                } catch {
+                  // Every step inside wipeAllData is individually
+                  // failure-tolerant, so getting here means something
+                  // unforeseen. Land back on a screen with a working button
+                  // rather than a "Deleting…" label that never resolves.
+                  setWiping(false);
+                  setConfirmWipe(false);
+                  return;
+                }
+                router.replace('/login');
+              }}
+            />
+            <Action label="Cancel" onPress={() => setConfirmWipe(false)} />
+          </FocusSection>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -317,6 +390,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   actions: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
+  confirm: {
+    backgroundColor: Palette.surface,
+    borderRadius: Layout.radius,
+    borderWidth: 1,
+    borderColor: Palette.danger,
+    padding: 16,
+    marginTop: 8,
+  },
+  confirmTitle: { color: Palette.text, fontSize: Type.body, fontWeight: '700' },
   actionOuter: { marginRight: 12, marginBottom: 12 },
   action: {
     backgroundColor: Palette.surfaceRaised,

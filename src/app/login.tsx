@@ -32,7 +32,28 @@ import { Focusable } from '@/ui/Focusable';
 import { FocusSection } from '@/ui/FocusSection';
 import { ABSOLUTE_FILL, IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
 
-const DEFAULT_SERVER = process.env.EXPO_PUBLIC_DEFAULT_SERVER_URL ?? '';
+/**
+ * Prefilled server address -- sideload builds only.
+ *
+ * Typing a URL into a phone (or worse, a TV remote) is miserable, so the build
+ * the family installs by hand keeps the kindness. The Play build must not have
+ * it: an app that describes itself as working with any Xtream-compatible server
+ * of your own, but opens with one particular service already typed in, argues
+ * against its own store listing to the one reader who matters. `.env` rides
+ * along with every build (see SHIPPING.md), so this cannot be left to whoever
+ * remembers to blank a variable.
+ *
+ * Both halves of the condition are read from `process.env` here rather than
+ * through IS_PLAY, so the minifier can fold this inside this module and the
+ * address is *absent* from the store bundle rather than merely unused in it.
+ * Through the import it would render an empty field while still shipping the
+ * URL in the constant pool -- see the note on UPDATE_API in
+ * src/hooks/useAppUpdate.ts for why the distinction is real.
+ */
+const DEFAULT_SERVER =
+  process.env.EXPO_PUBLIC_DISTRIBUTION === 'play'
+    ? ''
+    : (process.env.EXPO_PUBLIC_DEFAULT_SERVER_URL ?? '');
 const GLOW = require('@/assets/images/logo-glow.png') as number;
 
 export default function LoginScreen() {

@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand';
-import { Keys, readJson, writeJson } from './persist';
+import { Keys, readJson, remove, writeJson } from './persist';
 
 interface FavoritesFile {
   version: 1;
@@ -22,6 +22,7 @@ interface FavoritesState {
   hydrate: () => Promise<void>;
   isFavorite: (kind: 'movie' | 'series', id: number) => boolean;
   toggle: (kind: 'movie' | 'series', id: number) => void;
+  clearAll: () => Promise<void>;
 }
 
 export const useFavorites = create<FavoritesState>((set, get) => {
@@ -58,6 +59,12 @@ export const useFavorites = create<FavoritesState>((set, get) => {
         return kind === 'movie' ? { movies: next } : { series: next };
       });
       persist();
+    },
+
+    /** Erase, for the "Delete all app data" control. See src/store/wipe.ts. */
+    clearAll: async () => {
+      set({ movies: new Set<number>(), series: new Set<number>() });
+      await remove(Keys.favorites);
     },
   };
 });

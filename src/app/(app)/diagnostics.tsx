@@ -6,9 +6,11 @@
  * telemetry -- so the privacy policy stays accurate.
  */
 
+import * as Application from 'expo-application';
 import * as Updates from 'expo-updates';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SELF_UPDATES } from '@/distribution';
 import { useCrashLog, type CrashRecord } from '@/store/crashLog';
 import { EmptyState } from '@/ui/EmptyState';
 import { Focusable } from '@/ui/Focusable';
@@ -62,27 +64,45 @@ export default function DiagnosticsScreen() {
       <Text style={styles.h1}>Diagnostics</Text>
 
       <Section title="Version">
-        <Row label="App version" value={Updates.runtimeVersion ?? '—'} />
-        <Row label="Update channel" value={Updates.channel ?? 'not configured'} />
+        {/* expo-application, not expo-updates: with updates.enabled false in
+            the Play build every field on Updates is null or a constant, and a
+            version row reading "—" is worse than no row. This one is read from
+            the installed package either way. */}
         <Row
-          label="Bundle"
-          value={
-            Updates.isEmbeddedLaunch
-              ? 'Shipped with the app'
-              : (Updates.updateId?.slice(0, 8) ?? 'unknown')
-          }
+          label="App version"
+          value={`${Application.nativeApplicationVersion ?? '—'} (${
+            Application.nativeBuildVersion ?? '—'
+          })`}
         />
-        {Updates.createdAt ? (
-          <Row label="Bundle date" value={Updates.createdAt.toLocaleString()} />
+        {SELF_UPDATES ? (
+          <>
+            <Row label="Update channel" value={Updates.channel ?? 'not configured'} />
+            <Row
+              label="Bundle"
+              value={
+                Updates.isEmbeddedLaunch
+                  ? 'Shipped with the app'
+                  : (Updates.updateId?.slice(0, 8) ?? 'unknown')
+              }
+            />
+            {Updates.createdAt ? (
+              <Row label="Bundle date" value={Updates.createdAt.toLocaleString()} />
+            ) : null}
+          </>
         ) : null}
       </Section>
 
       <FocusSection autoFocus style={styles.actions}>
-        <Action
-          label={checking ? 'Checking…' : 'Check for updates'}
-          preferFocus
-          onPress={() => void checkForUpdate()}
-        />
+        {/* Absent from the Play build: updates.enabled is false there (see
+            app.config.ts), so this could only ever report that updates are
+            switched off. Play does the updating. */}
+        {SELF_UPDATES ? (
+          <Action
+            label={checking ? 'Checking…' : 'Check for updates'}
+            preferFocus
+            onPress={() => void checkForUpdate()}
+          />
+        ) : null}
         {records.length > 0 ? (
           <Action label="Clear crash log" danger onPress={() => void clear()} />
         ) : null}
