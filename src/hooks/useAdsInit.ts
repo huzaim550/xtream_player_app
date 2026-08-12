@@ -8,20 +8,27 @@
  * is on screen, and the one place it must never appear is over a landscape
  * film. The player is a root-stack route outside (app), so mounting this here
  * means the form can only ever land on a browsing screen.
+ *
+ * Skipped entirely once Remove Ads is owned -- there is no reason to start
+ * AdMob, including its consent-form network call, for someone who paid
+ * specifically not to see it.
  */
 
 import { useEffect } from 'react';
 import { initAds } from '@/ads';
 import { preload } from '@/ads/interstitial';
+import { removeAdsOwned, usePurchases } from '@/store/purchases';
 import { IS_TV } from '@/ui/platform';
 
 export function useAdsInit(): void {
+  const owned = usePurchases(removeAdsOwned);
+
   useEffect(() => {
-    if (IS_TV) return;
+    if (IS_TV || owned) return;
     void initAds().then((ok) => {
       // Ask for the first interstitial now rather than at the moment a film is
       // meant to pause for one.
       if (ok) void preload();
     });
-  }, []);
+  }, [owned]);
 }

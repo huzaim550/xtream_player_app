@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAdsInit } from '@/hooks/useAdsInit';
 import { useCatalogueSync } from '@/hooks/useCatalogueSync';
 import { useNotificationSync } from '@/hooks/useNotificationSync';
+import { usePurchasesInit } from '@/hooks/usePurchasesInit';
 import { useSession } from '@/store/session';
 import type { AdSurface } from '@/types/domain';
 import { AdBanner } from '@/ui/AdBanner';
@@ -67,6 +68,7 @@ export default function AppLayout() {
   useCatalogueSync();
   useNotificationSync();
   useAdsInit();
+  usePurchasesInit();
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();

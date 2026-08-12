@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { installCrashHandler, useCrashLog } from '@/store/crashLog';
 import { useAds } from '@/store/ads';
+import { usePurchases } from '@/store/purchases';
 import { useSession } from '@/store/session';
 import { BrandSplash } from '@/ui/BrandSplash';
 // Aliased: expo-router gives the bare name `ErrorBoundary` a special meaning
@@ -27,6 +28,8 @@ export default function RootLayout() {
   // so a cold start into /player (a deep link, or the app being reopened on a
   // film) knows whether it may break for an ad.
   const hydrateAds = useAds((s) => s.hydrate);
+  // Same reasoning, for the Remove Ads entitlement -- see store/purchases.ts.
+  const hydratePurchases = usePurchases((s) => s.hydrate);
   const [minElapsed, setMinElapsed] = useState(false);
 
   useEffect(() => {
@@ -35,7 +38,8 @@ export default function RootLayout() {
     // *before* this launch -- the only one anybody ever wants to see.
     void hydrateCrashLog();
     void hydrateAds();
-  }, [restore, hydrateCrashLog, hydrateAds]);
+    void hydratePurchases();
+  }, [restore, hydrateCrashLog, hydrateAds, hydratePurchases]);
 
   useEffect(() => {
     const t = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);

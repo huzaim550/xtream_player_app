@@ -33,6 +33,7 @@ import { show as showInterstitial } from '@/ads/interstitial';
 import { episodeStreamUrl, movieStreamUrl } from '@/api/streamUrl';
 import { midRollPoints, preRollOn, useAds } from '@/store/ads';
 import { useProgress, episodeKey, movieKey } from '@/store/progress';
+import { removeAdsOwned, usePurchases } from '@/store/purchases';
 import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { PlayerControls } from '@/ui/PlayerControls';
@@ -135,13 +136,15 @@ export default function PlayerScreen() {
   /** True while a full-screen ad is up. Drops the controls, like `left`. */
   const [adShowing, setAdShowing] = useState(false);
   const adsConfig = useAds((s) => s.config);
+  const removeAdsPurchased = usePurchases(removeAdsOwned);
   /**
    * Ads are skipped entirely for a downloaded file: choosing to download
    * something is choosing to watch it without the network, and an ad request
    * that cannot succeed would pause the film for nothing. Also skipped on TV,
-   * where a full-screen ad has no dismiss control a remote can reach.
+   * where a full-screen ad has no dismiss control a remote can reach, and once
+   * Remove Ads is owned.
    */
-  const adsAllowed = !!adsConfig && !params.localUri && !IS_TV;
+  const adsAllowed = !!adsConfig && !params.localUri && !IS_TV && !removeAdsPurchased;
   /** Break times in seconds, computed once from the duration. */
   const pendingBreaks = useRef<number[]>([]);
   const breaksPlanned = useRef(false);
@@ -351,7 +354,7 @@ export default function PlayerScreen() {
     if (firstLoad) {
       breaksPlanned.current = true;
       pendingBreaks.current = adsAllowed
-        ? midRollPoints(duration, target)
+        ? midRollPoints(duration, target, false)
         : [];
     }
     hasSeeked.current = true;
@@ -359,7 +362,7 @@ export default function PlayerScreen() {
     // The pre-roll replaces this play() rather than preceding it: runAd()
     // pauses and resumes around the ad, so starting playback first would leak a
     // second or two of film before the advert.
-    if (firstLoad && adsAllowed && preRollOn()) {
+    if (firstLoad && adsAllowed && preRollOn(false)) {
       void runAd();
       return;
     }

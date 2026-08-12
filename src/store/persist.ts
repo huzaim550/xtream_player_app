@@ -31,6 +31,10 @@ export const Keys = {
   notifications: 'xtream.notifications.v1',
   /** Ad settings, as last served by the Xtream server. See store/ads.ts. */
   ads: 'xtream.ads.v1',
+  /** Cached Remove Ads entitlement, so a cold start knows the answer before
+   *  Play Billing has answered. Google's own record is still the source of
+   *  truth -- see store/purchases.ts. */
+  purchases: 'xtream.purchases.v1',
   /** Records that SecureStore failed and the password fell back to plain storage. */
   credentialStorageDegraded: 'xtream.credentialStorageDegraded',
 } as const;

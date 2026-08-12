@@ -11,16 +11,18 @@ import * as Application from 'expo-application';
 import { useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { privacyOptionsRequired, showPrivacyOptions } from '@/ads';
 import { formatBytes } from '@/api/download';
 import { health } from '@/api/client';
-import { SELF_UPDATES } from '@/distribution';
+import { IS_PLAY, SELF_UPDATES } from '@/distribution';
 import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
+import { SUBSCRIPTION_SKU } from '@/iap';
 import { adsOn, useAds } from '@/store/ads';
 import { useCatalogue } from '@/store/catalogue';
 import { downloadedBytes, useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';
+import { removeAdsOwned, usePurchases } from '@/store/purchases';
 import { useSession } from '@/store/session';
 import { wipeAllData } from '@/store/wipe';
 import { Focusable } from '@/ui/Focusable';
@@ -51,7 +53,13 @@ export default function SettingsScreen() {
   const [probeError, setProbeError] = useState<string | null>(null);
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [wiping, setWiping] = useState(false);
-  const adsEnabled = adsOn();
+  const removeAdsPurchased = usePurchases(removeAdsOwned);
+  const priceLabel = usePurchases((s) => s.priceLabel);
+  const purchaseSyncing = usePurchases((s) => s.syncing);
+  const purchaseError = usePurchases((s) => s.error);
+  const purchase = usePurchases((s) => s.purchase);
+  const restorePurchase = usePurchases((s) => s.restore);
+  const adsEnabled = adsOn(removeAdsPurchased);
   const revalidate = useSession((s) => s.revalidate);
   // Everything this screen shows about the account -- connections in use,
   // expiry, status, whether ads are on -- comes from the handshake, which is
@@ -160,14 +168,40 @@ export default function SettingsScreen() {
       ) : null}
 
       <Section title="App">
-        {/* Stated plainly rather than left to be discovered. Ads are a property
-            of the account, set by whoever runs the server, and "why does my
-            player have adverts now" is otherwise a question only they can
-            answer. */}
-        <Row label="Ads on this account" value={adsEnabled ? 'On' : 'Off'} />
-        {privacyOptions ? (
+        {/* Stated plainly rather than left to be discovered. */}
+        <Row label="Ads" value={adsEnabled ? 'On' : 'Removed'} />
+        {IS_PLAY && !removeAdsPurchased ? (
+          <>
+            <Action
+              label={
+                purchaseSyncing
+                  ? 'Please wait…'
+                  : `Remove Ads${priceLabel ? ` — ${priceLabel}/mo` : ''}`
+              }
+              onPress={() => void purchase()}
+            />
+            <Action
+              label="Restore purchase"
+              onPress={() => void restorePurchase()}
+            />
+            {purchaseError ? <Text style={styles.warn}>{purchaseError}</Text> : null}
+          </>
+        ) : null}
+        {IS_PLAY && removeAdsPurchased ? (
+          <Action
+            label="Manage subscription"
+            onPress={() =>
+              void Linking.openURL(
+                `https://play.google.com/store/account/subscriptions?sku=${SUBSCRIPTION_SKU}&package=${Application.applicationId}`,
+              )
+            }
+          />
+        ) : null}
+        {privacyOptions && !removeAdsPurchased ? (
           // Google requires this to be reachable wherever the consent form
-          // offers a choice, so it is rendered only when the SDK says so.
+          // offers a choice, so it is rendered only when the SDK says so --
+          // and dropped once Remove Ads is owned, since AdMob is never
+          // started at all in that case (see useAdsInit.ts).
           <Action label="Ad privacy choices" onPress={() => void showPrivacyOptions()} />
         ) : null}
         <Row

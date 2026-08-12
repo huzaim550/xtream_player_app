@@ -12,7 +12,10 @@
  *     app.config.ts -- the requests to the update server
  *   - src/ads/index.ts, src/store/ads.ts, src/hooks/useAdsInit.ts, and the
  *     react-native-google-mobile-ads plugin entry in app.config.ts -- ads are
- *     always enabled and Google is always contacted to serve them
+ *     always enabled and Google is always contacted to serve them, unless
+ *     Remove Ads is owned
+ *   - src/iap/index.ts, src/store/purchases.ts -- the Remove Ads subscription
+ *     and what buying it sends to Google Play
  *   - src/app/(app)/settings.tsx -- the deletion controls named here
  * If any of those change, this file has to change with them.
  *
@@ -41,7 +44,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
     heading: 'The short version',
     body: [
       'Manzar is a player for a media server that you provide. It has no accounts of its own, no analytics, and no crash reporting. Nothing about what you watch is sent anywhere except to the server address you type in when you sign in.',
-      'It shows advertising, supplied by Google AdMob. The app has ads enabled by default, and sends data to Google to serve them. The Advertising section below describes what is sent and how to control it.',
+      'It shows advertising, supplied by Google AdMob. The app has ads enabled by default, and sends data to Google to serve them. The Advertising section below describes what is sent and how to control it. Ads can also be turned off entirely with a paid subscription, bought through Google Play — see Subscriptions below.',
     ],
   },
   {
@@ -57,7 +60,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
     body: [
       'The app talks to two main hosts. The first is the server address you entered. It sends your username and password with each request, because that is how the Xtream protocol authenticates.',
       'The second is Manzar’s own server. Installed from Google Play, the app asks it one thing: whether there are any announcements to show on the Notifications screen. A copy installed by hand instead — this app is also distributed directly — additionally asks whether a newer version exists, and downloads background updates, because nothing else would tell it. None of those requests carry anything about you: no username, no account details, no device identifier, and nothing about what you watch. Like any web server, it does see your IP address.',
-      'The app also contacts Google to serve ads. See Advertising below for what is sent.',
+      'The app also contacts Google to serve ads, and, if you buy the Remove Ads subscription, to process that purchase through Google Play. See Advertising and Subscriptions below for what each sends.',
       'When you play or download something, your server answers with a redirect to its own storage provider, and your device then fetches the video from there directly. That storage provider sees your IP address, as it would for any file download.',
       'There are no other network calls. No crash reporting, no telemetry, no social logins.',
     ],
@@ -72,7 +75,7 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
     heading: 'Deleting your data',
     body: [
       'Manzar has no account of its own, so there is no account here to delete. Your account belongs to whoever runs your server; ask them to close it, and ask them what they keep. Everything below is about this device.',
-      'Settings → Delete all app data removes the lot in one step: your saved password, your server address and username, your watch history, your saved titles, every downloaded file and the cached copy of your library. It asks first, and leaves you at the sign-in screen.',
+      'Settings → Delete all app data removes the lot in one step: your saved password, your server address and username, your watch history, your saved titles, every downloaded file and the cached copy of your library. It asks first, and leaves you at the sign-in screen. It does not cancel an active Remove Ads subscription — that lives with Google Play, not this app, and the app will recognise it again next time you sign in.',
       'If you want something narrower: Settings → Clear watch history removes every stored watch position and resume point, and the Downloads screen in the account menu deletes any downloaded file individually.',
       'Signing out removes your stored password. Your server address, watch history and saved titles are kept so that signing back in does not start you from scratch — use Delete all app data instead if you want those gone too.',
       'Uninstalling the app removes everything listed on this page from your device.',
@@ -87,6 +90,15 @@ export const PRIVACY_SECTIONS: PolicySection[] = [
       'Google\'s own description of how it uses this data is at policies.google.com/technologies/ads. The app asks Google for nothing rated above PG, so the ads themselves stay suitable for a broad audience.',
       'In regions where consent is legally required, a Google-supplied consent screen appears before the first ad, and your choices can be changed again from Settings.',
       'One note about Android\'s permission list: the Google advertising component adds an "advertising ID" permission to the app, and it is listed for every install. The permission being present is not the same as it being used — nothing reads that identifier until the app is launched.',
+    ],
+  },
+  {
+    heading: 'Subscriptions',
+    body: [
+      'Settings offers a Remove Ads subscription, billed through Google Play. This app never sees your payment details — Google Play handles the checkout entirely, the same as any other Play Store purchase.',
+      'To know whether it is currently active, the app asks Google Play, not your server or any server of ours: a purchase made on one device is recognised on any device signed into the same Google account, and Restore Purchase in Settings re-asks Google directly if the app’s own cached answer is ever wrong.',
+      'Cancelling or changing the subscription happens in Google Play’s own subscription management, reachable from the "Manage subscription" button in Settings once it is active — this app has no cancel flow of its own.',
+      'This subscription is only offered in the version of the app distributed through Google Play. A copy installed by hand does not have it, and keeps ads on.',
     ],
   },
   {

@@ -213,21 +213,53 @@ nothing until it is next opened; that is the deal, and the dashboard says so.
 
 ## Advertising
 
-AdMob, and **which users see it is the Xtream server's decision, not the app's**.
-`ads_for_user()` there resolves the master switch, the per-user flag and the
-default, and the handshake carries the answer as `manzar_ads` — a key that is
-**omitted entirely** unless ads are on for that account, so every other client
-of that endpoint sees exactly what it saw before. `src/store/ads.ts` is the only
-place that becomes app state; absent means off, which is also what an old server
-and a failed handshake mean.
+AdMob, on unconditionally for every account — the Xtream server has no say in
+this; `src/store/ads.ts` used to read a per-account flag off the login
+handshake (`manzar_ads`), but that coupling was removed, and the server repo
+is read-only from here regardless. The one thing that turns ads off now is the
+**Remove Ads subscription** below, bought through Google Play — not a server
+setting.
 
-- Placement counts are server-side so they can be tuned, or every ad killed,
-  from one checkbox with no release. A dashboard control that the app ignores is
-  worse than no control — if you remove a placement here, remove its knob there.
+- Placement counts (`DEFAULT_ADS_CONFIG` in `src/store/ads.ts`) are fixed in
+  the app now, not server-tunable. Changing them needs an app update, not a
+  dashboard checkbox.
+- Every pure function in `src/store/ads.ts` (`adsOn`, `bannerOn`, `preRollOn`,
+  `midRollPoints`) takes a `purchased: boolean` and returns the "no ads"
+  answer when true. Adding a new ad placement means adding it to this file
+  *and* threading that same boolean through its call site — the compiler
+  will not catch a placement that forgets to check it.
 - `src/ads/**` is the only code that imports `react-native-google-mobile-ads`,
-  and `initAds()` does not run until the store says this account has ads. That
-  deferral is what makes the privacy policy's "nothing is sent to Google unless
-  your server enabled them" true, so the two change together.
+  and `useAdsInit` skips `initAds()` entirely once Remove Ads is owned — no
+  Google network call at all for someone who paid specifically not to see one.
+
+### Remove Ads (Google Play Billing subscription)
+
+- `src/iap/index.ts` is the only file that imports `react-native-iap`, same
+  boundary role `src/ads/index.ts` plays for AdMob. Everything in it no-ops
+  when `!IS_PLAY` (`src/distribution.ts`) — Play Billing does not exist on the
+  sideloaded build, so that build keeps ads on with no purchase option.
+- There is no backend and nothing to verify a receipt against. Google's own
+  `getAvailablePurchases()` answer *is* the entitlement — `src/store/purchases.ts`
+  caches it to disk only so a cold start knows the answer before Play has
+  responded, never as the source of truth. A failed check (offline, Play
+  unreachable) keeps the last cached value rather than assuming the
+  subscription lapsed.
+- Deliberately **not** reset on sign-out or by `wipeAllData()`'s per-store
+  calls, unlike `useAds`: this entitlement belongs to the Google account /
+  device, not the Xtream login. The wipe's raw-key backstop still deletes the
+  cached value along with everything else, which is harmless — the next
+  `refresh()` re-derives it from Google in seconds.
+- `react-native-iap` ships its own Expo config plugin (`withIAP`), listed in
+  `app.config.ts`'s `plugins`. It is not optional decoration: the library
+  declares an amazon/play Gradle product-flavor split internally, and without
+  the plugin's `missingDimensionStrategy "store", "play"` line, `expo
+  prebuild` cannot resolve which flavor to build and fails outright — on
+  *both* distributions, not just the Play one.
+- Pinned to the `12.x` line (`react-native-iap@^12.16.4`) rather than the
+  current major, which requires `react-native-nitro-modules` (a New
+  Architecture native-module ecosystem this project has never used) as a peer.
+  12.x is the last classic-bridge release and is not deprecated; check before
+  moving off it, same caution as the AdMob pin below.
 - The consent form is a modal over whatever is on screen, which is why
   `useAdsInit` is mounted in `(app)` and never in the player.
 - The player's ad breaks read the **`timeUpdate` payload**, never the player

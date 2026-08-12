@@ -1,8 +1,12 @@
 /**
  * Ad settings for the app.
  *
- * Ads are enabled by default with a consistent configuration.
- * Users can always watch offline or disable ads at the app level if needed.
+ * Ads are enabled by default with a consistent configuration. Every function
+ * below takes a `purchased` flag -- whether the Remove Ads subscription
+ * (src/store/purchases.ts, Play Billing only) is currently owned -- and
+ * short-circuits to "no ads" when it is true. This file has no dependency on
+ * that store itself; callers pass the flag in, same as they already read it
+ * from their own selector.
  */
 
 import { create } from 'zustand';
@@ -75,12 +79,12 @@ export const useAds = create<AdsState>((set, get) => ({
  * it at mount.
  */
 
-export function adsOn(): boolean {
-  return true;
+export function adsOn(purchased: boolean): boolean {
+  return !purchased;
 }
 
-export function bannerOn(surface: AdSurface | null): boolean {
-  if (!surface) return false;
+export function bannerOn(surface: AdSurface | null, purchased: boolean): boolean {
+  if (!surface || purchased) return false;
   return DEFAULT_ADS_CONFIG.bannerSurfaces.includes(surface);
 }
 
@@ -88,8 +92,8 @@ export function midRollBreaks(): number {
   return DEFAULT_ADS_CONFIG.midRollBreaks;
 }
 
-export function preRollOn(): boolean {
-  return DEFAULT_ADS_CONFIG.preRoll > 0;
+export function preRollOn(purchased: boolean): boolean {
+  return !purchased && DEFAULT_ADS_CONFIG.preRoll > 0;
 }
 
 /**
@@ -103,7 +107,9 @@ export function preRollOn(): boolean {
 export function midRollPoints(
   durationSec: number,
   resumeAtSec: number,
+  purchased: boolean,
 ): number[] {
+  if (purchased) return [];
   const config = DEFAULT_ADS_CONFIG;
   const n = config.midRollBreaks;
   if (n <= 0) return [];

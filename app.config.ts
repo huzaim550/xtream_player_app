@@ -57,13 +57,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   // every existing install's data.
   slug: 'xtream-player',
   scheme: 'xtreamplayer',
-  // 1.3.0: adds react-native-google-mobile-ads, a native module. The bump is
-  // mandatory -- runtimeVersion follows this field, so without it every 1.2.0
+  // 1.3.0 added react-native-google-mobile-ads; 1.4.0 adds react-native-iap
+  // (the Remove Ads subscription), also a native module. The bump is
+  // mandatory -- runtimeVersion follows this field, so without it every prior
   // install would download a bundle that imports a module its APK does not
   // contain and crash at launch. The cost is the other half of the same rule:
-  // 1.2.0 phones stop receiving updates until someone installs the new APK by
+  // old phones stop receiving updates until someone installs the new APK by
   // hand, so never bump this without shipping one.
-  version: '1.3.0',
+  version: '1.4.0',
   orientation: 'portrait',
   userInterfaceStyle: 'dark',
   /**
@@ -109,9 +110,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * available" check has nothing to compare and never fires. This is the
      * integer Android orders installs by; `version` above is only the label.
      *
-     * 8, not 7: 6 is what the sideloaded installs are running and 7 was burned
-     * on a local build. Play never lets a code be reused, and the two flavours
-     * share this counter, so it advances past anything either has used.
+     * 9, not 8: bumped alongside the version above for react-native-iap. Play
+     * never lets a code be reused, and the two flavours share this counter, so
+     * it advances past anything either has used.
      *
      * They do NOT share a signature: the build server signs `aab` builds with
      * the project's upload key and leaves `apk` builds on the Android debug key,
@@ -121,7 +122,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
      * moving somebody from the sideloaded build to the store one is an uninstall
      * and a fresh install. PLAY.md spells out what that costs them.
      */
-    versionCode: 8,
+    versionCode: 9,
     /**
      * Permissions the app has never used, removed rather than carried.
      *
@@ -173,6 +174,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         optimizeAdLoading: true,
       },
     ],
+    /**
+     * The Remove Ads subscription. This plugin's only job on Android is
+     * patching android/app/build.gradle with `missingDimensionStrategy
+     * "store", "play"` -- the library itself declares an amazon/play flavor
+     * split (it also supports the Amazon Appstore), and without this line
+     * Gradle has no default and prebuild fails outright, on *both*
+     * distributions, not just the Play one. Runtime use is still gated by
+     * IS_PLAY in src/iap/index.ts; this only decides which native flavor of
+     * the library compiles in.
+     */
+    ['react-native-iap', { paymentProvider: 'Play Store' }],
   ],
   // reactCompiler comes from the template's known-good configuration; keep it.
   experiments: { typedRoutes: true, reactCompiler: true },

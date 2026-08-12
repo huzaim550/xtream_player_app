@@ -13,14 +13,16 @@
 import { useEffect } from 'react';
 import { show as showInterstitial } from '@/ads/interstitial';
 import { useAds } from '@/store/ads';
+import { removeAdsOwned, usePurchases } from '@/store/purchases';
 import { IS_TV } from '@/ui/platform';
 
 export function useTitleOpenAd(): void {
   const config = useAds((s) => s.config);
   const noteTitleOpen = useAds((s) => s.noteTitleOpen);
+  const owned = usePurchases(removeAdsOwned);
 
   useEffect(() => {
-    if (!config || IS_TV) return;
+    if (!config || IS_TV || owned) return;
     if (!noteTitleOpen()) return;
     // Fire and forget: nothing on this screen waits for it, and show() refuses
     // quietly if the floor since the last full-screen ad has not elapsed.

@@ -62,3 +62,20 @@ jest.mock('react-native-google-mobile-ads', () => ({
   MaxAdContentRating: { PG: 'PG' },
   TestIds: { ADAPTIVE_BANNER: 'test-banner', INTERSTITIAL: 'test-interstitial' },
 }));
+
+/**
+ * react-native-iap. src/store/purchases.ts reaches src/iap/index.ts at module
+ * scope, and the real native module throws at import time outside an app --
+ * same reason and same shape as the AdMob stub above. Inert is enough: no
+ * test exercises a real purchase flow, only the store's own state machine.
+ */
+jest.mock('react-native-iap', () => ({
+  __esModule: true,
+  initConnection: jest.fn(async () => true),
+  getAvailablePurchases: jest.fn(async () => []),
+  getSubscriptions: jest.fn(async () => []),
+  requestSubscription: jest.fn(async () => undefined),
+  finishTransaction: jest.fn(async () => true),
+  purchaseUpdatedListener: jest.fn(() => ({ remove: jest.fn() })),
+  purchaseErrorListener: jest.fn(() => ({ remove: jest.fn() })),
+}));
