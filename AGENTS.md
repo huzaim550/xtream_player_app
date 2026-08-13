@@ -119,14 +119,20 @@ methods delegate to those. Selectors are *not* affected
 store change. To check what the compiler did to a file:
 `npx babel --plugins babel-plugin-react-compiler <file>`.
 
-Navigation is **five tabs** — Home, Movies, Series, Search, My List. Downloads,
-Notifications, Settings, the privacy policy and sign-out live behind the header
-avatar (`AccountSheet`), and `AppHeader`'s `SUBPAGE_ROUTE` is what gives those
-pushed screens a back control. The bell beside the avatar is the one shortcut
-that earned space in the header: a badge nobody can find is not a notification. My List earns a tab because it is a browsing
-destination like the other four; Downloads is somewhere you visit occasionally.
-Six tabs on a phone makes every one of them too narrow to hit — do not add one
-without taking one away.
+Navigation is **five tabs** — Home, Movies, Series, Live, Search. My List,
+Downloads, Notifications, Settings, the privacy policy and sign-out live behind
+the header avatar (`AccountSheet`), and `AppHeader`'s `SUBPAGE_ROUTE` is what
+gives those pushed screens a back control. The bell beside the avatar is the one
+shortcut that earned space in the header: a badge nobody can find is not a
+notification. Six tabs on a phone makes every one of them too narrow to hit — do
+not add one without taking one away.
+
+My List used to hold the fifth tab and lost it to Live TV. The three catalogue
+tabs are the three kinds of thing the server actually serves — movies, series,
+channels — and a player missing one of those is missing a whole content type,
+while My List is a collection *you* built. That is the line `AccountSheet`
+already draws. My List is also the one exception to "pushed subpages carry no ad
+banner" (`adSurfaceFor`): where it is reached from changed, what it is did not.
 
 ## The player screen owns no window state
 
@@ -185,6 +191,54 @@ window call here.**
   playback share one resume position.
 - The same two server rules as playback apply to the transfer: build the URL
   inside the start handler (connection slots), and set no `headers`.
+
+## Live TV
+
+Channels, plus a now/next guide. The server has always implemented this
+(`get_live_categories`, `get_live_streams`, `get_short_epg`); the client did not
+until now. A channel is one line of `live.m3u` in the R2 bucket, parsed by
+`xtream/library.py parse_live_text` — so **an empty channel list is the normal
+state of a server with no playlist uploaded**, not a bug, and `(app)/live.tsx`
+says so in as many words.
+
+- **Play `/live/<user>/<pw>/<id>.m3u8`, never `direct_source`.** Every channel
+  arrives carrying its real upstream URL, and taking it would look like a
+  simplification. It loses three things: the play is never recorded
+  (`stats.record_play`, same trap as caching a presigned R2 link); for HLS the
+  route does not redirect at all but fetches the playlist and rewrites relative
+  child/segment URLs to absolute (`serve_live` / `rewrite_hls`), without which a
+  stream plays for two seconds and stalls; and an upstream URL is whatever the
+  playlist author typed, which is often plain http — dead on the Play build,
+  fine on the sideloaded one, the worst kind of difference between the two.
+  `api/streamUrl.ts` carries the long version.
+- **Guide text is base64 on the wire**, and `atob` is the wrong decoder for it:
+  Hermes has one, but it decodes to latin1, so every accented title renders as
+  mojibake. `decodeBase64Utf8` in `normalize.ts` is hand-written for that
+  reason, and `Buffer` is not available on a device. Watch `indexOf('')`
+  returning **0** rather than -1 — that bug decoded "Sport" as "Sport ".
+- A channel with no `tvg-id`, or a server with no EPG source, still gets
+  programmes: `xtream/epg.py _placeholders` invents blocks **titled after the
+  channel itself**. There is no flag for this on the wire, so `isPlaceholder`
+  compares the title to the channel name and the row shows nothing rather than
+  "BBC One / BBC One".
+- `store/epg.ts` is **memory-only, deliberately**. A cached poster is still
+  right a week later; a cached "on now" is wrong within the hour. It fetches per
+  *visible* row (one request per channel), caps concurrency at 3, and gives up
+  on a channel that errors rather than retrying it on every scroll.
+- The Live screen's `nowSec` ticks on a timer. Without it nothing on that screen
+  re-renders while you watch it, so progress bars would freeze and a finished
+  programme would never roll over.
+- Playback is the movie path with most of it switched off, all gated on one
+  `isLive` flag in `player.tsx`: no progress record (a channel is not something
+  you finish, and a channel id shares a number space with movie stream ids), no
+  resume, no seeking or scrubber, no mid-rolls — `player.duration` on an
+  open-ended stream is not a number you can divide into ad breaks. A pre-roll
+  still runs. The error screen leads with **Try again** (`player.replace`, which
+  does not tear down the surface) because a dead feed is worth re-asking for,
+  where an undecodable file is not.
+- Channel logos are third-party URLs from the playlist, unlike posters, which
+  are all served by your own server with an HMAC token. That is a new class of
+  outbound host and `src/content/privacy.ts` names it.
 
 ## In-app notifications
 
@@ -307,6 +361,12 @@ setting.
   everywhere; and series `last_modified` is always the current time, so it is
   useless for recency. Any chart must therefore be derived locally and labelled
   honestly — see the Top 10 row in `(app)/home.tsx`.
+- **Live category ids never collide with movie or series ones** — the server has
+  a test pinning that (`test_player_api.py`), which is what lets one
+  `Category.id` string be the join key across all three.
+- `get_short_epg` for an unknown channel returns `{"epg_listings": []}`, not an
+  error — so there is no not-found case, just an empty guide. Unlike the list
+  actions its healthy response is an object, so it must not use `expectArray`.
 - Never set `headers` on a video source: OkHttp replays them onto the presigned
   R2 redirect and breaks the SigV4 signature.
 - First catalogue call after the server's 300s scan-cache expiry blocks on an

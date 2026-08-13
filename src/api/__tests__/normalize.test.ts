@@ -11,13 +11,23 @@
 import { NotFoundError } from '../errors';
 import {
   cleanTitle,
+  decodeBase64Utf8,
   normalizeCategory,
+  normalizeChannel,
   normalizeMovie,
   normalizeMovieDetail,
+  normalizeProgramme,
   normalizeSeries,
   normalizeSeriesDetail,
 } from '../normalize';
-import type { RawMovie, RawSeries, RawSeriesInfo, RawVodInfo } from '@/types/raw';
+import type {
+  RawEpgListing,
+  RawLiveStream,
+  RawMovie,
+  RawSeries,
+  RawSeriesInfo,
+  RawVodInfo,
+} from '@/types/raw';
 
 const rawMovie = (over: Partial<RawMovie> = {}): RawMovie =>
   ({
@@ -210,5 +220,160 @@ describe('normalizeSeriesDetail', () => {
     });
     expect(d.seasons).toEqual([]);
     expect(d.name).toBe('Cached');
+  });
+});
+
+/* --- live TV ---------------------------------------------------------------
+ *
+ * Same failure mode as everything above: none of this throws when it is wrong.
+ * A bad base64 decode renders a plausible-looking wrong string, and a
+ * timestamp read off the wrong field renders a guide that is confidently
+ * several hours out.
+ */
+
+const rawChannel = (over: Partial<RawLiveStream> = {}): RawLiveStream =>
+  ({
+    num: 1,
+    name: 'BBC One',
+    stream_type: 'live',
+    stream_id: 8001,
+    stream_icon: 'https://logos.example/bbc1.png',
+    epg_channel_id: 'ch8001',
+    category_id: '301',
+    direct_source: 'http://feeds.example/bbc1.m3u8',
+    tv_archive: 0,
+    ...over,
+  }) as RawLiveStream;
+
+/**
+ * base64 of a UTF-8 string, the way Python's base64.b64encode would produce it.
+ *
+ * Written out rather than reaching for `Buffer`, which is a Node global that
+ * exists under jest and not under tsc or on a device -- and, more usefully,
+ * this encodes by a different route than `decodeBase64Utf8` decodes, so the
+ * tests below cannot pass by sharing a bug with the code they check.
+ */
+const b64 = (s: string): string => {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  // encodeURIComponent percent-escapes exactly the non-ASCII bytes, so undoing
+  // it byte by byte gives the UTF-8 encoding without a TextEncoder.
+  const bytes = [...encodeURIComponent(s)].reduce<number[]>((acc, ch, i, arr) => {
+    if (ch === '%') return acc;
+    if (i >= 2 && arr[i - 2] === '%') return acc;
+    if (i >= 1 && arr[i - 1] === '%') {
+      acc.push(parseInt(arr[i] + arr[i + 1], 16));
+      return acc;
+    }
+    acc.push(ch.charCodeAt(0));
+    return acc;
+  }, []);
+
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const [a, b, c] = [bytes[i], bytes[i + 1], bytes[i + 2]];
+    const n = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
+    out += alphabet[(n >> 18) & 63] + alphabet[(n >> 12) & 63];
+    out += b === undefined ? '=' : alphabet[(n >> 6) & 63];
+    out += c === undefined ? '=' : alphabet[n & 63];
+  }
+  return out;
+};
+
+const rawListing = (over: Partial<RawEpgListing> = {}): RawEpgListing =>
+  ({
+    id: '1',
+    epg_id: 'ch8001',
+    title: b64('The One Show'),
+    lang: 'en',
+    start: '2026-08-13 18:00:00',
+    end: '2026-08-13 18:30:00',
+    description: b64('Topical magazine.'),
+    channel_id: 'ch8001',
+    start_timestamp: '1786089600',
+    stop_timestamp: '1786091400',
+    now_playing: 1,
+    has_archive: 0,
+    ...over,
+  }) as RawEpgListing;
+
+describe('decodeBase64Utf8', () => {
+  it('decodes plain ASCII', () => {
+    expect(decodeBase64Utf8(b64('News at One'))).toBe('News at One');
+  });
+
+  it('decodes multi-byte UTF-8 rather than mangling it into latin1', () => {
+    // This is the whole reason the decoder is hand-written: `atob` would give
+    // "MÃ©tÃ©o" here, which looks like data and renders as damage.
+    expect(decodeBase64Utf8(b64('Météo à Paris'))).toBe('Météo à Paris');
+    expect(decodeBase64Utf8(b64('Nachrichten für Sie'))).toBe('Nachrichten für Sie');
+    expect(decodeBase64Utf8(b64('新闻联播'))).toBe('新闻联播');
+  });
+
+  it('decodes characters outside the basic plane', () => {
+    expect(decodeBase64Utf8(b64('Football ⚽ 🇬🇧'))).toBe('Football ⚽ 🇬🇧');
+  });
+
+  it('handles both padded and unpadded input', () => {
+    // The server pads; strip it and the answer must not change.
+    const padded = b64('Sport');
+    expect(padded.endsWith('=')).toBe(true);
+    expect(decodeBase64Utf8(padded)).toBe('Sport');
+    expect(decodeBase64Utf8(padded.replace(/=+$/, ''))).toBe('Sport');
+  });
+
+  it('returns empty for empty or absent input rather than throwing', () => {
+    // A programme with no description is the common case, not an error.
+    expect(decodeBase64Utf8('')).toBe('');
+    expect(decodeBase64Utf8(undefined as unknown as string)).toBe('');
+  });
+
+  it('never throws on garbage', () => {
+    // One malformed title must leave one row blank, not take the screen down.
+    expect(() => decodeBase64Utf8('!!!not base64!!!')).not.toThrow();
+    expect(() => decodeBase64Utf8('////')).not.toThrow();
+  });
+});
+
+describe('normalizeChannel', () => {
+  it("turns an absent tvg-logo into null rather than an empty URL", () => {
+    expect(normalizeChannel(rawChannel({ stream_icon: '' })).logoUrl).toBeNull();
+  });
+
+  it('stringifies category_id so it compares against Category.id', () => {
+    const c = normalizeChannel(rawChannel({ category_id: 301 as unknown as string }));
+    expect(c.categoryId).toBe('301');
+  });
+
+  it('keeps the epg channel id verbatim', () => {
+    // It binds a channel to its programmes. Building it would silently unbind
+    // the guide for any server that ever numbers channels differently.
+    expect(normalizeChannel(rawChannel()).epgChannelId).toBe('ch8001');
+  });
+
+  it('falls back to a usable name when the playlist gave none', () => {
+    expect(normalizeChannel(rawChannel({ name: '   ' })).name).toBe('Channel');
+  });
+});
+
+describe('normalizeProgramme', () => {
+  it('decodes the base64 title and description', () => {
+    const p = normalizeProgramme(rawListing());
+    expect(p.title).toBe('The One Show');
+    expect(p.description).toBe('Topical magazine.');
+  });
+
+  it('reads the numeric timestamps, not the formatted times', () => {
+    // start/end are rendered in the server's UTC for display; parsing those
+    // back would reintroduce a timezone bug that start_timestamp cannot have.
+    const p = normalizeProgramme(rawListing());
+    expect(p.startSec).toBe(1786089600);
+    expect(p.stopSec).toBe(1786091400);
+  });
+
+  it('falls back to 0 rather than NaN on an unparseable timestamp', () => {
+    // NaN would make every comparison in nowNext() false, so the row would
+    // silently show nothing instead of showing something wrong.
+    const p = normalizeProgramme(rawListing({ start_timestamp: 'nope' }));
+    expect(p.startSec).toBe(0);
   });
 });

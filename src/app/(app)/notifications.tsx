@@ -11,7 +11,6 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNotifications, type AppNotification } from '@/store/notifications';
@@ -21,7 +20,6 @@ import { FocusSection } from '@/ui/FocusSection';
 import { Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
 
 export default function NotificationsScreen() {
-  const router = useRouter();
   const items = useNotifications((s) => s.items);
   const readIds = useNotifications((s) => s.readIds);
   const markAllRead = useNotifications((s) => s.markAllRead);

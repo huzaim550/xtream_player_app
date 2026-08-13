@@ -11,7 +11,7 @@ import { create } from 'zustand';
 import { getCatalogue } from '@/api/endpoints';
 import { AuthError } from '@/api/errors';
 import { Keys, readJson, writeJson } from './persist';
-import type { Catalogue, Movie, Series, Session } from '@/types/domain';
+import type { Catalogue, Channel, Movie, Series, Session } from '@/types/domain';
 
 /** Matches the server's SCAN_TTL: below this, a refetch cannot return new data. */
 const SOFT_TTL_MS = 300_000;
@@ -31,7 +31,27 @@ interface CatalogueState {
 
   movieById: (id: number) => Movie | undefined;
   seriesById: (id: number) => Series | undefined;
+  channelById: (id: number) => Channel | undefined;
   isStale: () => boolean;
+}
+
+/**
+ * Fill in fields a cache written by an older build cannot have.
+ *
+ * The cache key is deliberately NOT bumped for this. Bumping it would be
+ * tidier, but it also discards a working offline library the moment the app
+ * updates -- and someone who opens the app on a train after an update would
+ * find it empty, which is the one thing the disk cache exists to prevent.
+ * Live TV missing until the next refresh is a far smaller cost, and that
+ * refresh happens seconds later on any connection at all.
+ */
+function backfill(cached: Catalogue): Catalogue {
+  if (cached.channels && cached.liveCategories) return cached;
+  return {
+    ...cached,
+    channels: cached.channels ?? [],
+    liveCategories: cached.liveCategories ?? [],
+  };
 }
 
 export const useCatalogue = create<CatalogueState>((set, get) => ({
@@ -45,7 +65,7 @@ export const useCatalogue = create<CatalogueState>((set, get) => ({
   hydrate: async () => {
     const cached = await readJson<Catalogue>(Keys.catalogue);
     const fresh = cached && Date.now() - cached.fetchedAt < HARD_TTL_MS;
-    set({ data: fresh ? cached : null, hydrated: true });
+    set({ data: fresh ? backfill(cached) : null, hydrated: true });
   },
 
   isStale: () => {
@@ -84,4 +104,5 @@ export const useCatalogue = create<CatalogueState>((set, get) => ({
 
   movieById: (id) => get().data?.movies.find((m) => m.id === id),
   seriesById: (id) => get().data?.series.find((s) => s.id === id),
+  channelById: (id) => get().data?.channels.find((c) => c.id === id),
 }));

@@ -8,16 +8,20 @@
 import { NotFoundError } from './errors';
 import type {
   Category,
+  Channel,
   Episode,
   Movie,
   MovieDetail,
+  Programme,
   Season,
   Series,
   SeriesDetail,
 } from '@/types/domain';
 import type {
   RawCategory,
+  RawEpgListing,
   RawEpisode,
+  RawLiveStream,
   RawMovie,
   RawSeries,
   RawSeriesInfo,
@@ -66,6 +70,127 @@ export function cleanTitle(name: string): string {
 
 export function normalizeCategory(raw: RawCategory): Category {
   return { id: String(raw.category_id), name: raw.category_name };
+}
+
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Decode the base64 the guide arrives in, as UTF-8.
+ *
+ * Written out rather than reached for, because the two obvious shortcuts are
+ * both wrong here:
+ *
+ *  - `atob` exists on Hermes but decodes to latin1, so every accented
+ *    programme title ("Météo", "Nachrichten für Sie") comes out as mojibake --
+ *    which is precisely the failure xtream/epg.py warns about in the comment
+ *    above programme_json, just moved one step downstream.
+ *  - `Buffer` is a Node global. React Native does not have one, and pulling in
+ *    a polyfill for eleven lines of arithmetic is not a trade worth making.
+ *
+ * So: base64 to bytes, then bytes to a string by hand. Anything that is not
+ * valid base64 decodes to '' rather than throwing -- a malformed programme
+ * title should leave a row blank, never take the Live screen down with it.
+ */
+export function decodeBase64Utf8(input: string): string {
+  const clean = (input ?? '').replace(/[^A-Za-z0-9+/]/g, '');
+  if (!clean) return '';
+
+  const bytes: number[] = [];
+  for (let i = 0; i < clean.length; i += 4) {
+    // A trailing group shorter than 4 characters is padding that was stripped
+    // above; the missing sextets read as 0 and contribute no byte.
+    let chunk = 0;
+    let have = 0;
+    for (let j = 0; j < 4; j++) {
+      const ch = clean[i + j];
+      // `ch === undefined` must be tested on its own: indexOf('') returns 0,
+      // not -1, so a missing character would otherwise read as 'A' and
+      // contribute a phantom byte -- decoding "Sport" as "Sport ".
+      const idx = ch === undefined ? -1 : B64_ALPHABET.indexOf(ch);
+      chunk = (chunk << 6) | (idx < 0 ? 0 : idx);
+      if (idx >= 0) have++;
+    }
+    // n sextets carry n-1 whole bytes.
+    for (let k = 0; k < have - 1; k++) {
+      bytes.push((chunk >> (16 - 8 * k)) & 0xff);
+    }
+  }
+
+  // UTF-8 by hand. Continuation bytes that never arrive, or a lead byte we do
+  // not understand, become U+FFFD rather than derailing the whole string.
+  let out = '';
+  for (let i = 0; i < bytes.length; ) {
+    const b = bytes[i];
+    let cp: number;
+    let len: number;
+    if (b < 0x80) {
+      cp = b;
+      len = 1;
+    } else if (b >= 0xc0 && b < 0xe0) {
+      cp = b & 0x1f;
+      len = 2;
+    } else if (b >= 0xe0 && b < 0xf0) {
+      cp = b & 0x0f;
+      len = 3;
+    } else if (b >= 0xf0 && b < 0xf8) {
+      cp = b & 0x07;
+      len = 4;
+    } else {
+      out += '�';
+      i += 1;
+      continue;
+    }
+    if (i + len > bytes.length) {
+      out += '�';
+      break;
+    }
+    for (let k = 1; k < len; k++) {
+      cp = (cp << 6) | (bytes[i + k] & 0x3f);
+    }
+    out += String.fromCodePoint(cp);
+    i += len;
+  }
+  return out;
+}
+
+/**
+ * A live channel.
+ *
+ * `stream_icon` gets `posterOrNull` like every other artwork field, but it is
+ * not the same kind of URL -- see the comment on `Channel.logoUrl`.
+ */
+export function normalizeChannel(raw: RawLiveStream): Channel {
+  return {
+    id: raw.stream_id,
+    name: (raw.name ?? '').trim() || 'Channel',
+    categoryId: String(raw.category_id),
+    logoUrl: posterOrNull(raw.stream_icon),
+    // Read, never constructed: this is the key that binds a channel to a
+    // programme, and inventing it would silently unbind the guide.
+    epgChannelId: raw.epg_channel_id ?? '',
+  };
+}
+
+/**
+ * One programme.
+ *
+ * The timestamps are the string fields, not the formatted `start`/`end` ones:
+ * those are rendered in the server's UTC and would need parsing back out of a
+ * display format, while `start_timestamp` is already the unix second we want.
+ *
+ * A channel with no real guide data still gets programmes -- the server fills
+ * in placeholders titled after the channel itself (xtream/epg.py
+ * _placeholders). There is no flag for that in this payload, so the Live screen
+ * distinguishes them the only way it can: a placeholder's title equals the
+ * channel name. That check belongs to the caller, not here.
+ */
+export function normalizeProgramme(raw: RawEpgListing): Programme {
+  return {
+    title: decodeBase64Utf8(raw.title),
+    description: decodeBase64Utf8(raw.description),
+    startSec: Number(raw.start_timestamp) || 0,
+    stopSec: Number(raw.stop_timestamp) || 0,
+  };
 }
 
 export function normalizeMovie(raw: RawMovie): Movie {

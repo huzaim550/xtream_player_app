@@ -48,6 +48,17 @@ export interface Episode {
   qualityLabel: string | null;
 }
 
+/** Minimal per-episode data threaded through the player route's `episodes`
+ *  param, so it can offer next/previous episode across any number of hops
+ *  with no further get_series_info call. */
+export interface EpisodeNavEntry {
+  id: string;
+  ext: string;
+  title: string;
+  season: number;
+  episodeNum: number;
+}
+
 export interface Season {
   number: number;
   name: string;
@@ -83,6 +94,39 @@ export interface MovieDetail {
   audioCodec: string | null;
 }
 
+/**
+ * A live TV channel.
+ *
+ * Far thinner than a Movie, and that is the server's shape rather than an
+ * omission: a channel is one line of `live.m3u`, so a name, a group and a logo
+ * is all there is. Quality, plot and duration have no meaning here — what is on
+ * right now comes from the guide instead (see `Programme` and store/epg.ts).
+ */
+export interface Channel {
+  id: number;
+  name: string;
+  categoryId: string;
+  /**
+   * null when the playlist gave no `tvg-logo`.
+   *
+   * Unlike `Movie.posterUrl` this is a third-party address, not one served by
+   * your own server — so it can be http (which the Play build blocks) or simply
+   * dead, and the UI must render a channel with no logo as a normal case.
+   */
+  logoUrl: string | null;
+  /** The guide key. Always "ch<id>" on this server, but read it, never build it. */
+  epgChannelId: string;
+}
+
+/** One entry in the guide, with the base64 already decoded and the timestamps
+ *  already numbers. Unix seconds, like everything else here. */
+export interface Programme {
+  title: string;
+  description: string;
+  startSec: number;
+  stopSec: number;
+}
+
 export interface Session {
   baseUrl: string;
   username: string;
@@ -98,8 +142,15 @@ export interface AccountInfo {
   activeConnections: number;
 }
 
-/** The browsing screens that can carry a banner. Mirrors AD_SURFACES on the server. */
-export type AdSurface = 'home' | 'movies' | 'series' | 'search' | 'my_list';
+/**
+ * The browsing screens that can carry a banner.
+ *
+ * Decided in the app, not on the server -- the per-account handshake flag this
+ * used to mirror was removed. Adding a member here means adding it to SURFACES
+ * in store/ads.ts and to adSurfaceFor in the (app) layout; nothing else reads
+ * it, and a member missing from either is simply a screen with no banner.
+ */
+export type AdSurface = 'home' | 'movies' | 'series' | 'live' | 'search' | 'my_list';
 
 /**
  * Ad settings for the signed-in account. Only exists when the server said this
@@ -123,8 +174,16 @@ export interface AdsConfig {
 export interface Catalogue {
   movies: Movie[];
   series: Series[];
+  /**
+   * Live channels. Empty until a `live.m3u` exists in the server's bucket, and
+   * that is a perfectly normal state — the Live screen says so rather than
+   * looking broken.
+   */
+  channels: Channel[];
   movieCategories: Category[];
   /** The server emits a single series bucket, so this is rarely worth a rail. */
   seriesCategories: Category[];
+  /** Channel groups, from `group-title` in the playlist. */
+  liveCategories: Category[];
   fetchedAt: number;
 }

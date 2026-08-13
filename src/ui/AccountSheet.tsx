@@ -36,7 +36,12 @@ export function AccountSheet({ visible, onClose }: { visible: boolean; onClose: 
   const [confirming, setConfirming] = useState(false);
 
   const go = (
-    href: '/(app)/downloads' | '/(app)/settings' | '/(app)/privacy' | '/(app)/notifications',
+    href:
+      | '/(app)/my-list'
+      | '/(app)/downloads'
+      | '/(app)/settings'
+      | '/(app)/privacy'
+      | '/(app)/notifications',
   ) => {
     onClose();
     setConfirming(false);
@@ -105,6 +110,13 @@ export function AccountSheet({ visible, onClose }: { visible: boolean; onClose: 
             badge={unread}
             preferFocus
             onPress={() => go('/(app)/notifications')}
+          />
+          {/* First of the navigation rows: it is the one people came here for
+              most often once Live TV took its tab. */}
+          <Row
+            icon="bookmark-outline"
+            label="My List"
+            onPress={() => go('/(app)/my-list')}
           />
           <Row
             icon="download-outline"

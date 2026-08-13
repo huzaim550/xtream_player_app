@@ -28,7 +28,7 @@ import { FocusSection } from '@/ui/FocusSection';
 import { MediaRow } from '@/ui/MediaRow';
 import { SkeletonRow } from '@/ui/Skeleton';
 import { IS_TV, Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
-import type { Episode, SeriesDetail } from '@/types/domain';
+import type { Episode, EpisodeNavEntry, SeriesDetail } from '@/types/domain';
 
 const RELATED_COUNT = 20;
 
@@ -97,8 +97,6 @@ export default function SeriesDetailScreen() {
   const poster = detail?.posterUrl ?? cached?.posterUrl ?? null;
 
   const play = (ep: Episode) => {
-    const at = ordered.findIndex((e) => e.id === ep.id);
-    const next = at >= 0 ? ordered[at + 1] : undefined;
     const dl = downloads[episodeKey(ep.id)];
 
     router.push({
@@ -114,12 +112,20 @@ export default function SeriesDetailScreen() {
         episodeNum: String(ep.episodeNum),
         posterUrl: poster ?? undefined,
         localUri: dl?.status === 'done' ? (dl.fileUri ?? undefined) : undefined,
-        // Handed over so the player can auto-advance with no API call.
-        nextId: next?.id,
-        nextExt: next?.ext,
-        nextTitle: next?.title,
-        nextSeason: next ? String(next.season) : undefined,
-        nextEpisodeNum: next ? String(next.episodeNum) : undefined,
+        // The whole broadcast order, handed over so the player can offer
+        // next/previous episode -- and keep offering them across any number of
+        // hops -- with no further get_series_info call.
+        episodes: JSON.stringify(
+          ordered.map(
+            (e): EpisodeNavEntry => ({
+              id: e.id,
+              ext: e.ext,
+              title: e.title,
+              season: e.season,
+              episodeNum: e.episodeNum,
+            }),
+          ),
+        ),
       },
     });
   };

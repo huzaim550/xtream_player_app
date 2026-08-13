@@ -29,7 +29,7 @@ const LOGO = require('@/assets/images/logo-mark.png') as number;
 /** Routes that are pushed on top of a tab and therefore want a back control. */
 const DETAIL_ROUTE = /^\/(movie|series)\//;
 /** Routes reached from the account sheet rather than the tab bar. */
-const SUBPAGE_ROUTE = /^\/(settings|privacy|downloads|diagnostics|notifications)$/;
+const SUBPAGE_ROUTE = /^\/(settings|privacy|downloads|diagnostics|notifications|my-list)$/;
 
 export function AppHeader() {
   const router = useRouter();

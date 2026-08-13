@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSearch } from '@/hooks/useSearch';
+import { ChannelRow } from '@/ui/ChannelRow';
 import { MediaRow } from '@/ui/MediaRow';
 import { FocusSection } from '@/ui/FocusSection';
 import { Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
@@ -18,9 +19,10 @@ import { Layout, OVERSCAN, Palette, Type } from '@/ui/platform';
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const { movies, series, empty } = useSearch(query);
+  const { movies, series, channels, empty } = useSearch(query);
 
-  const nothing = !empty && movies.length === 0 && series.length === 0;
+  const nothing =
+    !empty && movies.length === 0 && series.length === 0 && channels.length === 0;
 
   return (
     <View style={styles.flex}>
@@ -29,7 +31,7 @@ export default function SearchScreen() {
           style={styles.input}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search movies and series"
+          placeholder="Search movies, series and channels"
           placeholderTextColor={Palette.textMuted}
           autoCapitalize="none"
           autoCorrect={false}
@@ -63,6 +65,35 @@ export default function SearchScreen() {
               }))}
               onSelect={(i) => router.push(`/series/${series[i].id}`)}
             />
+            {/* Rows, not a MediaRow: a channel has no poster, so a carousel of
+                them would be a carousel of empty placeholders. No guide is
+                fetched here either -- a search result is something you are
+                about to open, not something you are browsing. */}
+            {channels.length > 0 ? (
+              <View style={styles.channels}>
+                <Text style={styles.sectionTitle}>Live TV</Text>
+                <FocusSection>
+                  {channels.map((c) => (
+                    <ChannelRow
+                      key={c.id}
+                      name={c.name}
+                      logoUrl={c.logoUrl}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/player',
+                          params: {
+                            kind: 'live',
+                            id: String(c.id),
+                            title: c.name,
+                            posterUrl: c.logoUrl ?? undefined,
+                          },
+                        })
+                      }
+                    />
+                  ))}
+                </FocusSection>
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -88,6 +119,14 @@ const styles = StyleSheet.create({
     borderColor: Palette.surfaceRaised,
   },
   results: { paddingVertical: 12 },
+  channels: { marginTop: 8 },
+  sectionTitle: {
+    color: Palette.text,
+    fontSize: Type.heading,
+    fontWeight: '700',
+    paddingHorizontal: OVERSCAN.horizontal,
+    marginBottom: 8,
+  },
   hint: {
     color: Palette.textMuted,
     fontSize: Type.body,

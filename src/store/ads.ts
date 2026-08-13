@@ -12,7 +12,7 @@
 import { create } from 'zustand';
 import type { AdSurface, AdsConfig } from '@/types/domain';
 
-const SURFACES: AdSurface[] = ['home', 'movies', 'series', 'search', 'my_list'];
+const SURFACES: AdSurface[] = ['home', 'movies', 'series', 'live', 'search', 'my_list'];
 
 /** Default ad configuration - always enabled. */
 const DEFAULT_ADS_CONFIG: AdsConfig = {

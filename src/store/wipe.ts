@@ -19,6 +19,7 @@ import { useAds } from './ads';
 import { useCatalogue } from './catalogue';
 import { useCrashLog } from './crashLog';
 import { useDownloads } from './downloads';
+import { useEpg } from './epg';
 import { useFavorites } from './favorites';
 import { useNotifications } from './notifications';
 import { clearPassword, Keys, remove } from './persist';
@@ -44,6 +45,9 @@ export async function wipeAllData(): Promise<void> {
   await useCatalogue.getState().clear();
   await useCrashLog.getState().clear();
   useNotifications.getState().clearAll();
+  // Memory only, so the key sweep below cannot reach it -- and a guide fetched
+  // for one account should not still be on screen under the next one.
+  useEpg.getState().clearAll();
 
   // Ads are a property of the account and must not survive into whatever is
   // signed in next; resetInterstitial drops the frequency counters too.

@@ -7,17 +7,12 @@
 
 import { midRollPoints } from '../ads';
 
-const DEFAULT_CONFIG = {
-  midRollBreaks: 2,
-  minTitleSeconds: 900,
-};
-
 describe('midRollPoints', () => {
-  it('puts one break at the halfway mark', () => {
-    expect(midRollPoints(3600, 0, false)).toEqual([1200, 2400]);
-  });
-
-  it('spreads breaks evenly across the film', () => {
+  // Was two identical assertions under different names, one of which claimed
+  // "one break at the halfway mark" while asserting two -- a leftover from when
+  // the break count came off the server handshake and the default was 1.
+  it('spreads the configured breaks evenly across the film', () => {
+    // DEFAULT_ADS_CONFIG.midRollBreaks is 2, so an hour splits into thirds.
     expect(midRollPoints(3600, 0, false)).toEqual([1200, 2400]);
   });
 

@@ -13,7 +13,7 @@
 
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text } from 'react-native';
 import { useCatalogue } from '@/store/catalogue';
 import { useDownloads } from '@/store/downloads';
 import { useFavorites } from '@/store/favorites';

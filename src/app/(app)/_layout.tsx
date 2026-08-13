@@ -30,12 +30,19 @@ type IoniconName = keyof typeof Ionicons.glyphMap;
  *
  * Settings and Downloads used to compete for a slot here. Both moved behind the
  * header avatar instead: Settings is rarely opened, and Downloads is somewhere
- * you visit occasionally rather than browse. My List earns a tab because it is
- * a browsing destination like the other four. Six tabs on a phone makes every
- * one of them too narrow to hit reliably.
+ * you visit occasionally rather than browse. Six tabs on a phone makes every
+ * one of them too narrow to hit reliably, so anything arriving has to displace
+ * something.
+ *
+ * Live TV displaced My List, which moved behind the avatar next to Downloads.
+ * The three catalogue tabs are the three kinds of thing the server actually
+ * serves -- movies, series, channels -- and a player missing one of them is
+ * missing a whole content type, while My List is a collection *you* built. That
+ * is the same line the account sheet already draws: things about you rather
+ * than about the catalogue live behind the avatar.
  */
 const NAV: readonly {
-  href: '/(app)/home' | '/(app)/movies' | '/(app)/series' | '/(app)/search' | '/(app)/my-list';
+  href: '/(app)/home' | '/(app)/movies' | '/(app)/series' | '/(app)/live' | '/(app)/search';
   label: string;
   icon: IoniconName;
   iconActive: IoniconName;
@@ -43,8 +50,8 @@ const NAV: readonly {
   { href: '/(app)/home', label: 'Home', icon: 'home-outline', iconActive: 'home' },
   { href: '/(app)/movies', label: 'Movies', icon: 'film-outline', iconActive: 'film' },
   { href: '/(app)/series', label: 'Series', icon: 'tv-outline', iconActive: 'tv' },
+  { href: '/(app)/live', label: 'Live', icon: 'radio-outline', iconActive: 'radio' },
   { href: '/(app)/search', label: 'Search', icon: 'search-outline', iconActive: 'search' },
-  { href: '/(app)/my-list', label: 'My List', icon: 'bookmark-outline', iconActive: 'bookmark' },
 ] as const;
 
 /**
@@ -54,11 +61,17 @@ const NAV: readonly {
  * privacy policy, Downloads) carry no banner. Settings and the policy in
  * particular must not: an ad beside the document explaining the app's data
  * handling is indefensible, whatever the server says.
+ *
+ * My List is the one exception to "pushed subpages carry no banner", and it
+ * keeps its banner on purpose: it moved behind the avatar when Live TV took its
+ * tab, but it is still a grid of titles you browse, which is what the rule is
+ * actually about. Where it is reached from did not change what it is.
  */
 function adSurfaceFor(pathname: string): AdSurface | null {
   if (pathname.endsWith('/home')) return 'home';
   if (pathname.endsWith('/movies')) return 'movies';
   if (pathname.endsWith('/series')) return 'series';
+  if (pathname.endsWith('/live')) return 'live';
   if (pathname.endsWith('/search')) return 'search';
   if (pathname.endsWith('/my-list')) return 'my_list';
   return null;

@@ -48,21 +48,38 @@ function clock(sec: number): string {
 
 export interface PlayerControlsProps {
   player: VideoPlayer;
+  /**
+   * A live channel rather than a title with an end.
+   *
+   * Removes the scrubber, the clock and the ±10s buttons -- not to simplify the
+   * chrome, but because none of them mean anything against an open-ended HLS
+   * stream. `player.duration` is not a finite number there, so a progress bar
+   * would render at a nonsense position and a seek would be a request to jump
+   * somewhere the stream does not have.
+   */
+  live?: boolean;
   title: string;
   subtitle?: string;
   /** What media3 did with the video track. See the probe in src/app/player.tsx. */
   probe?: string | null;
   onBack: () => void;
   onOpenExternally: () => void;
+  /** Present only when there is a neighbouring episode to jump to -- absent
+   *  hides the button rather than disabling it. */
+  onPrevEpisode?: () => void;
+  onNextEpisode?: () => void;
 }
 
 export function PlayerControls({
   player,
+  live = false,
   title,
   subtitle,
   probe,
   onBack,
   onOpenExternally,
+  onPrevEpisode,
+  onNextEpisode,
 }: PlayerControlsProps) {
   const insets = useSafeAreaInsets();
   const [visible, setVisible] = useState(true);
@@ -91,6 +108,10 @@ export function PlayerControls({
   // Poll rather than listen: timeUpdate fires at 1Hz, which makes the counter
   // visibly lag a scrub. 250ms is smooth and still cheap.
   useEffect(() => {
+    // Nothing renders position or duration on a live channel, so the poll would
+    // be four reads a second off the player for no output at all -- and reading
+    // a player is the one operation on this screen that can throw.
+    if (live) return;
     const t = setInterval(() => {
       if (scrubbing) return;
       // A tick can land in the gap between the player being released and this
@@ -106,7 +127,7 @@ export function PlayerControls({
       }
     }, 250);
     return () => clearInterval(t);
-  }, [player, scrubbing]);
+  }, [player, scrubbing, live]);
 
   // Auto-hide, restarted by `visible` flipping back to true. Never hides while
   // a track panel is open or a drag is in progress.
@@ -204,9 +225,20 @@ export function PlayerControls({
       >
         <IconButton icon="arrow-back" label="Back" onPress={onBack} />
         <View style={styles.titles}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.titleLine}>
+            {/* The only thing that tells you this is a channel and not a
+                recording, now that the scrubber -- which would have said so by
+                its absence -- is gone. */}
+            {live ? (
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>LIVE</Text>
+              </View>
+            ) : null}
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+          </View>
           {subtitle ? (
             <Text style={styles.subtitle} numberOfLines={1}>
               {subtitle}
@@ -222,15 +254,27 @@ export function PlayerControls({
       </FocusSection>
 
       <FocusSection style={styles.center}>
-        <IconButton
-          icon="play-back"
-          label={`Back ${SKIP_SECONDS} seconds`}
-          big
-          onPress={() => {
-            player.seekBy(-SKIP_SECONDS);
-            show();
-          }}
-        />
+        {onPrevEpisode ? (
+          <IconButton
+            icon="play-skip-back"
+            label="Previous episode"
+            big
+            onPress={() => {
+              onPrevEpisode();
+            }}
+          />
+        ) : null}
+        {!live ? (
+          <IconButton
+            icon="play-back"
+            label={`Back ${SKIP_SECONDS} seconds`}
+            big
+            onPress={() => {
+              player.seekBy(-SKIP_SECONDS);
+              show();
+            }}
+          />
+        ) : null}
         <IconButton
           icon={isPlaying ? 'pause' : 'play'}
           label={isPlaying ? 'Pause' : 'Play'}
@@ -241,15 +285,27 @@ export function PlayerControls({
             show();
           }}
         />
-        <IconButton
-          icon="play-forward"
-          label={`Forward ${SKIP_SECONDS} seconds`}
-          big
-          onPress={() => {
-            player.seekBy(SKIP_SECONDS);
-            show();
-          }}
-        />
+        {!live ? (
+          <IconButton
+            icon="play-forward"
+            label={`Forward ${SKIP_SECONDS} seconds`}
+            big
+            onPress={() => {
+              player.seekBy(SKIP_SECONDS);
+              show();
+            }}
+          />
+        ) : null}
+        {onNextEpisode ? (
+          <IconButton
+            icon="play-skip-forward"
+            label="Next episode"
+            big
+            onPress={() => {
+              onNextEpisode();
+            }}
+          />
+        ) : null}
       </FocusSection>
 
       <View
@@ -262,21 +318,31 @@ export function PlayerControls({
           },
         ]}
       >
-        <View style={styles.timeRow}>
-          <Text style={styles.time}>{clock(position)}</Text>
-          <Text style={styles.time}>-{clock(Math.max(0, duration - position))}</Text>
-        </View>
+        {/* Both come out for a live channel: there is no elapsed time that
+            means anything and nowhere to scrub to. The track pickers below
+            stay -- a live HLS stream can carry several audio renditions and
+            subtitle tracks exactly like a file can. */}
+        {!live ? (
+          <>
+            <View style={styles.timeRow}>
+              <Text style={styles.time}>{clock(position)}</Text>
+              <Text style={styles.time}>-{clock(Math.max(0, duration - position))}</Text>
+            </View>
 
-        <View
-          style={styles.barHit}
-          onLayout={(e: LayoutChangeEvent) => setBarWidth(e.nativeEvent.layout.width)}
-          {...pan.panHandlers}
-        >
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${pct * 100}%` }]} />
-          </View>
-          <View style={[styles.knob, { left: `${pct * 100}%` }]} />
-        </View>
+            <View
+              style={styles.barHit}
+              onLayout={(e: LayoutChangeEvent) =>
+                setBarWidth(e.nativeEvent.layout.width)
+              }
+              {...pan.panHandlers}
+            >
+              <View style={styles.barTrack}>
+                <View style={[styles.barFill, { width: `${pct * 100}%` }]} />
+              </View>
+              <View style={[styles.knob, { left: `${pct * 100}%` }]} />
+            </View>
+          </>
+        ) : null}
 
         <FocusSection style={styles.trackRow}>
           <TrackButton
@@ -445,7 +511,19 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
   titles: { flex: 1 },
-  title: { color: Palette.text, fontSize: Type.body, fontWeight: '700' },
+  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { flex: 1, color: Palette.text, fontSize: Type.body, fontWeight: '700' },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: Palette.brand,
+  },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Palette.text },
+  liveText: { color: Palette.text, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   subtitle: { color: Palette.textSecondary, fontSize: Type.caption, marginTop: 2 },
   // Diagnostic, not chrome: deliberately quiet, and only on screen while the
   // controls are. Remove it once the black-picture bug is closed.

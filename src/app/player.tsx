@@ -19,7 +19,7 @@ import { useEventListener } from 'expo';
 import { useKeepAwake } from 'expo-keep-awake';
 import { NavigationBar } from 'expo-navigation-bar';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -30,7 +30,7 @@ import {
 } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { show as showInterstitial } from '@/ads/interstitial';
-import { episodeStreamUrl, movieStreamUrl } from '@/api/streamUrl';
+import { episodeStreamUrl, liveStreamUrl, movieStreamUrl } from '@/api/streamUrl';
 import { midRollPoints, preRollOn, useAds } from '@/store/ads';
 import { useProgress, episodeKey, movieKey } from '@/store/progress';
 import { removeAdsOwned, usePurchases } from '@/store/purchases';
@@ -38,6 +38,7 @@ import { useSession } from '@/store/session';
 import { Focusable } from '@/ui/Focusable';
 import { PlayerControls } from '@/ui/PlayerControls';
 import { ABSOLUTE_FILL, IS_TV, Layout, Palette, Type } from '@/ui/platform';
+import type { EpisodeNavEntry } from '@/types/domain';
 
 /** How long the "next episode" card counts down before it plays itself. */
 const AUTOPLAY_SECONDS = 10;
@@ -75,8 +76,9 @@ export default function PlayerScreen() {
   const resumeAtFor = useProgress((s) => s.resumeAt);
 
   const params = useLocalSearchParams<{
-    kind: 'movie' | 'episode';
+    kind: 'movie' | 'episode' | 'live';
     id: string;
+    /** Unused for `live`: a channel has no container, only an HLS playlist. */
     ext: string;
     title?: string;
     posterUrl?: string;
@@ -88,17 +90,51 @@ export default function PlayerScreen() {
     restart?: string;
     /** file:// path of a completed download. Wins over the network source. */
     localUri?: string;
-    /** The episode after this one, handed over by the series screen so the
-     *  player can auto-advance without calling get_series_info. */
-    nextId?: string;
-    nextExt?: string;
-    nextTitle?: string;
-    nextSeason?: string;
-    nextEpisodeNum?: string;
+    /** The show's whole broadcast order, JSON-encoded (`EpisodeNavEntry[]`),
+     *  handed over by the series screen so the player can offer next/previous
+     *  episode -- across any number of hops -- without calling
+     *  get_series_info again. Absent for episodes opened from Continue
+     *  Watching or Downloads, which is why those hide the buttons. */
+    episodes?: string;
   }>();
 
-  const kind = params.kind === 'episode' ? 'episode' : 'movie';
-  const entryKey = kind === 'movie' ? movieKey(params.id) : episodeKey(params.id);
+  const kind =
+    params.kind === 'episode' ? 'episode' : params.kind === 'live' ? 'live' : 'movie';
+
+  /**
+   * Live TV is playback with most of this screen's machinery switched off.
+   *
+   * There is no position worth remembering, no duration to divide into ad
+   * breaks, no seeking, and no next episode -- and each of those is not merely
+   * pointless but actively wrong: `player.duration` on an open-ended HLS stream
+   * is not a number a progress bar or a mid-roll schedule can be computed from.
+   * Every use below is gated on this one flag rather than on `kind` directly,
+   * so what live does and does not do reads as one list.
+   */
+  const isLive = kind === 'live';
+
+  // Never read when `isLive`: save() returns early and the resume target below
+  // is hard-zero. That guard is what matters, because a channel id and a movie
+  // stream id come from the same number space -- if live ever did write
+  // progress under this key it could land on an unrelated film's record.
+  const entryKey = kind === 'episode' ? episodeKey(params.id) : movieKey(params.id);
+
+  // The show's broadcast order, if the screen that launched us had it (the
+  // series screen always does; Continue Watching and Downloads don't, so
+  // there is nothing to skip to and the buttons below just don't render).
+  const episodeList = useMemo<EpisodeNavEntry[]>(() => {
+    if (!params.episodes) return [];
+    try {
+      const parsed = JSON.parse(params.episodes);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [params.episodes]);
+  const episodeIndex = episodeList.findIndex((e) => e.id === params.id);
+  const nextEp = episodeIndex >= 0 ? episodeList[episodeIndex + 1] : undefined;
+  const prevEp = episodeIndex >= 1 ? episodeList[episodeIndex - 1] : undefined;
+
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   /**
@@ -145,6 +181,13 @@ export default function PlayerScreen() {
    * Remove Ads is owned.
    */
   const adsAllowed = !!adsConfig && !params.localUri && !IS_TV && !removeAdsPurchased;
+  /**
+   * Mid-rolls need a duration to divide up, and a live stream has none -- so
+   * `midRollPoints` is never given the chance to compute break times from
+   * whatever open-ended HLS reports as `duration`. A pre-roll still runs: it
+   * happens before playback starts and needs to know nothing about the title.
+   */
+  const midRollsAllowed = adsAllowed && !isLive;
   /** Break times in seconds, computed once from the duration. */
   const pendingBreaks = useRef<number[]>([]);
   const breaksPlanned = useRef(false);
@@ -157,7 +200,9 @@ export default function PlayerScreen() {
   const [left, setLeft] = useState(false);
   // Captured once: "Start over" must win over whatever is stored, and the
   // stored value would otherwise change under us as we write progress.
-  const resumeTarget = useRef(params.restart === '1' ? 0 : resumeAtFor(entryKey));
+  const resumeTarget = useRef(
+    params.restart === '1' || isLive ? 0 : resumeAtFor(entryKey),
+  );
 
   // A downloaded file needs no server round trip at all. Otherwise the URL is
   // built here and nowhere else, because every request to it takes a connection
@@ -165,10 +210,13 @@ export default function PlayerScreen() {
   const uri = params.localUri
     ? params.localUri
     : session
-      ? kind === 'movie'
-        ? movieStreamUrl(session, Number(params.id), params.ext || 'mp4')
-        : episodeStreamUrl(session, params.id, params.ext || 'mp4')
+      ? kind === 'live'
+        ? liveStreamUrl(session, Number(params.id))
+        : kind === 'movie'
+          ? movieStreamUrl(session, Number(params.id), params.ext || 'mp4')
+          : episodeStreamUrl(session, params.id, params.ext || 'mp4')
       : null;
+
 
   const player = useVideoPlayer(uri ? { uri, contentType: 'auto' } : null, (p) => {
     p.timeUpdateEventInterval = 1;
@@ -179,6 +227,10 @@ export default function PlayerScreen() {
 
   const save = useCallback(() => {
     if (!player) return;
+    // Live has no position to resume to, so there is nothing to write -- and
+    // writing anything would put a channel in Continue Watching, which is a row
+    // of things you can finish.
+    if (isLive) return;
     // Reading position off a released player throws
     // ERR_USING_RELEASED_SHARED_OBJECT. This runs from the unmount cleanup and
     // from the AppState handler, both of which can fire *after* useVideoPlayer
@@ -207,7 +259,7 @@ export default function PlayerScreen() {
       positionSec: position,
       durationSec: duration,
     });
-  }, [player, record, entryKey, kind, params]);
+  }, [player, record, entryKey, kind, params, isLive]);
 
   /**
    * The one way out of this screen.
@@ -256,27 +308,43 @@ export default function PlayerScreen() {
     else router.replace('/(app)/home');
   }, [save, flush, player, router]);
 
+  /** Shared by the autoplay card, the manual skip buttons, and playPrev --
+   *  forwards the same `episodes` list unchanged, which is what lets the
+   *  chain continue indefinitely with no further API call. */
+  const jumpTo = useCallback(
+    (ep: EpisodeNavEntry) => {
+      save();
+      void flush();
+      // replace, not push: otherwise Back walks the user through every
+      // episode they skipped or auto-advanced through.
+      router.replace({
+        pathname: '/player',
+        params: {
+          kind: 'episode',
+          id: ep.id,
+          ext: ep.ext,
+          title: ep.title,
+          seriesId: params.seriesId,
+          seriesName: params.seriesName,
+          season: String(ep.season),
+          episodeNum: String(ep.episodeNum),
+          posterUrl: params.posterUrl,
+          episodes: params.episodes,
+        },
+      });
+    },
+    [params, router, save, flush],
+  );
+
   const playNext = useCallback(() => {
-    if (!params.nextId) return;
-    save();
-    void flush();
-    // replace, not push: otherwise Back walks the user through every episode
-    // they auto-advanced through.
-    router.replace({
-      pathname: '/player',
-      params: {
-        kind: 'episode',
-        id: params.nextId,
-        ext: params.nextExt ?? 'mp4',
-        title: params.nextTitle ?? '',
-        seriesId: params.seriesId,
-        seriesName: params.seriesName,
-        season: params.nextSeason,
-        episodeNum: params.nextEpisodeNum,
-        posterUrl: params.posterUrl,
-      },
-    });
-  }, [params, router, save, flush]);
+    if (!nextEp) return;
+    jumpTo(nextEp);
+  }, [nextEp, jumpTo]);
+
+  const playPrev = useCallback(() => {
+    if (!prevEp) return;
+    jumpTo(prevEp);
+  }, [prevEp, jumpTo]);
 
   /** Reads the selected video track. Guarded: the player may be released. */
   const sampleProbe = useCallback(() => {
@@ -353,7 +421,7 @@ export default function PlayerScreen() {
     const firstLoad = !breaksPlanned.current;
     if (firstLoad) {
       breaksPlanned.current = true;
-      pendingBreaks.current = adsAllowed
+      pendingBreaks.current = midRollsAllowed
         ? midRollPoints(duration, target, false)
         : [];
     }
@@ -374,7 +442,7 @@ export default function PlayerScreen() {
     // The break check reads the event payload, never the player object, so the
     // one thing running every second on this screen cannot be the thing that
     // touches a released player.
-    if (!adsAllowed || adShowing || leaving.current || left) return;
+    if (!midRollsAllowed || adShowing || leaving.current || left) return;
     const next = pendingBreaks.current[0];
     if (next === undefined || currentTime < next) return;
     // Consumed before the await, so the tick a second from now cannot fire the
@@ -394,7 +462,7 @@ export default function PlayerScreen() {
   // End of an episode with another one waiting: offer it, and take the offer if
   // the user does nothing.
   useEventListener(player, 'playToEnd', () => {
-    if (params.nextId) setCountdown(AUTOPLAY_SECONDS);
+    if (nextEp) setCountdown(AUTOPLAY_SECONDS);
   });
 
   useEffect(() => {
@@ -470,21 +538,66 @@ export default function PlayerScreen() {
       flags: 268435456, // FLAG_ACTIVITY_NEW_TASK
     }).catch(() => setError('No other video player is installed on this device.'));
 
+  /**
+   * Ask the server for the channel again.
+   *
+   * `replace` rather than remounting the screen: it swaps the source on the
+   * player that already exists, so the surface underneath is never torn down
+   * and rebuilt -- which is the one thing on this screen known to reintroduce
+   * the invisible-video bug that `useExoShutter` exists to work around.
+   *
+   * Note this issues a *new* request to /live/..., which is fine where a second
+   * request for a film would not be: the connection slot is keyed on
+   * (user, ip), so re-asking from the same device lands on the slot already
+   * held rather than consuming the second of two.
+   */
+  const retry = () => {
+    setError(null);
+    setReady(false);
+    try {
+      player.replace({ uri, contentType: 'auto' });
+      player.play();
+    } catch {
+      setError('Could not reconnect to this channel.');
+    }
+  };
+
   if (error) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorTitle}>Playback failed</Text>
+        <Text style={styles.errorTitle}>
+          {isLive ? 'Channel unavailable' : 'Playback failed'}
+        </Text>
         <Text style={styles.error}>{error}</Text>
         <Text style={styles.hint}>
-          If this title is HEVC/x265 or in an AVI container, this device may not
-          be able to decode it. A player like VLC often can.
+          {isLive
+            ? 'Live channels come from sources outside your server, so one can go off the air or refuse a connection at any time. Trying again often works.'
+            : 'If this title is HEVC/x265 or in an AVI container, this device may not be able to decode it. A player like VLC often can.'}
         </Text>
-        <Focusable onPress={openExternally} style={styles.button} hasTVPreferredFocus>
-          <Text style={styles.buttonText}>Open in another app</Text>
+        {/* A dead feed is worth re-asking for; an undecodable file is not. The
+            two error screens therefore lead with different actions. */}
+        {isLive ? (
+          <Focusable onPress={retry} style={styles.button} hasTVPreferredFocus>
+            <Text style={styles.buttonText}>Try again</Text>
+          </Focusable>
+        ) : (
+          <Focusable onPress={openExternally} style={styles.button} hasTVPreferredFocus>
+            <Text style={styles.buttonText}>Open in another app</Text>
+          </Focusable>
+        )}
+        <Focusable
+          onPress={isLive ? openExternally : leave}
+          style={styles.buttonSecondary}
+        >
+          <Text style={styles.buttonSecondaryText}>
+            {isLive ? 'Open in another app' : 'Go back'}
+          </Text>
         </Focusable>
-        <Focusable onPress={leave} style={styles.buttonSecondary}>
-          <Text style={styles.buttonSecondaryText}>Go back</Text>
-        </Focusable>
+        {isLive ? (
+          <Focusable onPress={leave} style={styles.buttonSecondary}>
+            <Text style={styles.buttonSecondaryText}>Go back</Text>
+          </Focusable>
+        ) : null}
       </View>
     );
   }
@@ -568,19 +681,22 @@ export default function PlayerScreen() {
       {ready && !adShowing && !Layout.useNativeControls && countdown === null ? (
         <PlayerControls
           player={player}
+          live={isLive}
           title={params.title || 'Playing'}
           subtitle={episodeLabel}
           probe={probe ? `${probe} · frame ${firstFrame ? 'yes' : 'NO'}` : null}
           onBack={leave}
           onOpenExternally={openExternally}
+          onPrevEpisode={kind === 'episode' && prevEp ? playPrev : undefined}
+          onNextEpisode={kind === 'episode' && nextEp ? playNext : undefined}
         />
       ) : null}
 
-      {countdown !== null ? (
+      {countdown !== null && nextEp ? (
         <View style={styles.nextCard}>
           <Text style={styles.nextLabel}>Next episode</Text>
           <Text style={styles.nextTitle} numberOfLines={2}>
-            S{params.nextSeason}E{params.nextEpisodeNum} · {params.nextTitle}
+            S{nextEp.season}E{nextEp.episodeNum} · {nextEp.title}
           </Text>
           <View style={styles.nextButtons}>
             <Focusable onPress={playNext} style={styles.button} hasTVPreferredFocus>

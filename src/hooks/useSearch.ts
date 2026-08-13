@@ -8,7 +8,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useCatalogue } from '@/store/catalogue';
-import type { Movie, Series } from '@/types/domain';
+import type { Channel, Movie, Series } from '@/types/domain';
 
 const DEBOUNCE_MS = 250;
 
@@ -44,6 +44,7 @@ function rank(displayName: string, rawName: string, needle: string): number {
 export interface SearchResults {
   movies: Movie[];
   series: Series[];
+  channels: Channel[];
   empty: boolean;
 }
 
@@ -60,7 +61,9 @@ export function useSearch(query: string): SearchResults {
 
   return useMemo(() => {
     const needle = fold(deferred);
-    if (!needle || !data) return { movies: [], series: [], empty: !needle };
+    if (!needle || !data) {
+      return { movies: [], series: [], channels: [], empty: !needle };
+    }
 
     const movies = data.movies
       .map((m) => ({ item: m, s: rank(m.displayName, m.name, needle) }))
@@ -74,6 +77,14 @@ export function useSearch(query: string): SearchResults {
       .sort((a, b) => b.s - a.s || a.item.displayName.localeCompare(b.item.displayName))
       .map((x) => x.item);
 
-    return { movies, series, empty: false };
+    // A channel has one name and no release junk, so both arguments to rank()
+    // are the same string -- there is no cleaned/raw distinction to exploit.
+    const channels = data.channels
+      .map((c) => ({ item: c, s: rank(c.name, c.name, needle) }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s || a.item.name.localeCompare(b.item.name))
+      .map((x) => x.item);
+
+    return { movies, series, channels, empty: false };
   }, [deferred, data]);
 }

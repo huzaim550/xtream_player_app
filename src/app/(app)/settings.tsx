@@ -18,7 +18,7 @@ import { health } from '@/api/client';
 import { IS_PLAY, SELF_UPDATES } from '@/distribution';
 import { formatUpdateSize, openUpdateDownload, useAppUpdate } from '@/hooks/useAppUpdate';
 import { SUBSCRIPTION_SKU } from '@/iap';
-import { adsOn, useAds } from '@/store/ads';
+import { adsOn } from '@/store/ads';
 import { useCatalogue } from '@/store/catalogue';
 import { downloadedBytes, useDownloads } from '@/store/downloads';
 import { useProgress } from '@/store/progress';

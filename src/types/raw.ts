@@ -196,6 +196,69 @@ export interface RawSeriesInfo {
   episodes: Record<string, RawEpisode[]>;
 }
 
+/**
+ * `get_live_streams`.
+ *
+ * Unlike movies and series, a live channel is not a file in the bucket — it is
+ * a line in `live.m3u`, so everything here comes from that playlist's EXTINF
+ * attributes (xtream/library.py parse_live_text).
+ */
+export interface RawLiveStream {
+  num: number;
+  name: string;
+  stream_type: 'live';
+  stream_id: number;
+  /**
+   * `tvg-logo` from the playlist, or '' when the line carried none.
+   *
+   * NOT one of our poster URLs: this is an arbitrary third-party address chosen
+   * by whoever wrote the m3u, with no HMAC token and no guarantee of https.
+   */
+  stream_icon: string;
+  /** Matches the `<channel id>` in /xmltv.php. Always "ch<stream_id>". */
+  epg_channel_id: string;
+  added: string;
+  is_adult: string;
+  thumbnail: string;
+  category_id: string;
+  category_ids: number[];
+  custom_sid: string;
+  /** Hardcoded 0 — this server has no catch-up. */
+  tv_archive: number;
+  tv_archive_duration: number;
+  /** The channel's real upstream URL. Deliberately not what we play; see the
+   *  comment on liveStreamUrl in api/streamUrl.ts. */
+  direct_source: string;
+}
+
+/**
+ * One programme from `get_short_epg` / `get_simple_data_table`.
+ *
+ * `title` and `description` are **base64**, not plain text (xtream/epg.py
+ * programme_json says so outright: apps decode them blindly and render mojibake
+ * if you send raw strings). Everything numeric is a string, as usual.
+ */
+export interface RawEpgListing {
+  id: string;
+  epg_id: string;
+  /** base64 of UTF-8. */
+  title: string;
+  lang: string;
+  start: string;
+  end: string;
+  /** base64 of UTF-8. */
+  description: string;
+  channel_id: string;
+  start_timestamp: string;
+  stop_timestamp: string;
+  now_playing: number;
+  has_archive: number;
+}
+
+export interface RawShortEpg {
+  epg_listings: RawEpgListing[];
+}
+
 /** `GET /` — a real readiness probe, 503 when degraded. */
 export interface RawHealth {
   status: 'ok' | 'degraded' | 'setup';
